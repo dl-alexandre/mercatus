@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Debug ArbitrageEngine",
+            "program": "${workspaceFolder:mercatus}/.build/debug/ArbitrageEngine",
+            "preLaunchTask": "swift: Build Debug ArbitrageEngine"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Release ArbitrageEngine",
+            "program": "${workspaceFolder:mercatus}/.build/release/ArbitrageEngine",
+            "preLaunchTask": "swift: Build Release ArbitrageEngine"
+        }
+    ]
+}

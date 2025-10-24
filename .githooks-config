@@ -1,0 +1,19 @@
+# Git Hooks Configuration for Mercatus
+# Edit these settings to customize hook behavior
+
+# Skip certain checks (set to 'true' to skip)
+SKIP_TESTS=false
+SKIP_BUILD=false
+SKIP_DEBUG_CHECK=false
+
+# Maximum file size in bytes (default: 1MB)
+MAX_FILE_SIZE=1048576
+
+# Test timeout in seconds
+TEST_TIMEOUT=30
+
+# Forbidden patterns (comma-separated)
+FORBIDDEN_PATTERNS="print(,debugPrint(,dump(,NSLog("
+
+# Enable strict mode (treats warnings as errors)
+STRICT_MODE=false
