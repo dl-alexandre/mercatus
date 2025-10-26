@@ -492,4 +492,21 @@ public final class KrakenConnector: ExchangeConnector, @unchecked Sendable {
             return normalized
         }
     }
+
+    // MARK: - Trading Methods (Default implementations)
+
+    public func getOrderBook(symbol: String) async throws -> OrderBook {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "KrakenConnector", reason: "getOrderBook not implemented for \(name)"))
+    }
+
+    public func getRecentTransactions(limit: Int) async throws -> [Transaction] {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "KrakenConnector", reason: "getRecentTransactions not implemented for \(name)"))
+    }
+
+    public func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "KrakenConnector", reason: "placeOrder not implemented for \(name)"))
+    }
 }

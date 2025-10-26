@@ -17,6 +17,60 @@
             "name": "Release ArbitrageEngine",
             "program": "${workspaceFolder:mercatus}/.build/release/ArbitrageEngine",
             "preLaunchTask": "swift: Build Release ArbitrageEngine"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Debug SmartVestor",
+            "program": "${workspaceFolder:mercatus}/.build/debug/SmartVestor",
+            "preLaunchTask": "swift: Build Debug SmartVestor"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Release SmartVestor",
+            "program": "${workspaceFolder:mercatus}/.build/release/SmartVestor",
+            "preLaunchTask": "swift: Build Release SmartVestor"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Debug SmartVestorCLI",
+            "program": "${workspaceFolder:mercatus}/.build/debug/SmartVestorCLI",
+            "preLaunchTask": "swift: Build Debug SmartVestorCLI"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Release SmartVestorCLI",
+            "program": "${workspaceFolder:mercatus}/.build/release/SmartVestorCLI",
+            "preLaunchTask": "swift: Build Release SmartVestorCLI"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Debug ContinuousSmartVestor",
+            "program": "${workspaceFolder:mercatus}/.build/debug/ContinuousSmartVestor",
+            "preLaunchTask": "swift: Build Debug ContinuousSmartVestor"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Release ContinuousSmartVestor",
+            "program": "${workspaceFolder:mercatus}/.build/release/ContinuousSmartVestor",
+            "preLaunchTask": "swift: Build Release ContinuousSmartVestor"
         }
     ]
 }

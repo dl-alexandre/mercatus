@@ -3,19 +3,21 @@ import Connectors
 import Utils
 import Core
 
-public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
+public final class LiveInvestmentEngine: ArbitrageEngine, Sendable {
     private let config: ArbitrageConfig
     private let logger: StructuredLogger
     private let configManager: ConfigurationManager
     private let krakenConnector: KrakenConnector
     private let coinbaseConnector: CoinbaseConnector
+    private let geminiConnector: GeminiConnector
     private let normalizer: ExchangeNormalizer
-    private let spreadDetector: SpreadDetector
-    private let tradeSimulator: TradeSimulator
+    private let spreadDetector: SpreadDetector?
+    private let triangularDetector: TriangularArbitrageDetector?
+    private let tradeSimulator: TradeSimulator?
     private let performanceMonitor: PerformanceMonitor
     private let dataIngestion: ExchangeDataIngestion
 
-    private let componentName = "ArbitrageEngine"
+    private let componentName = "InvestmentEngine"
     private let state: State
 
     private actor State {
@@ -69,14 +71,21 @@ public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
                 )
             )
         )
+        self.geminiConnector = GeminiConnector(
+            logger: self.logger,
+            configuration: .init(
+                credentials: .init(
+                    apiKey: config.geminiCredentials.apiKey,
+                    apiSecret: config.geminiCredentials.apiSecret
+                )
+            )
+        )
 
         self.normalizer = ExchangeNormalizer()
-        self.spreadDetector = SpreadDetector(config: config, logger: self.logger)
-
-        let simulatorConfig = TradeSimulator.Configuration(
-            initialBalance: Decimal(config.defaults.virtualUSDStartingBalance)
-        )
-        self.tradeSimulator = TradeSimulator(config: simulatorConfig, logger: self.logger)
+        // Arbitrage components disabled - investment engine mode
+        self.spreadDetector = nil
+        self.triangularDetector = nil
+        self.tradeSimulator = nil
 
         self.performanceMonitor = PerformanceMonitor(logger: self.logger)
         self.dataIngestion = ExchangeDataIngestion(normalizer: normalizer, logger: self.logger)
@@ -106,31 +115,47 @@ public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
 
         logger.info(
             component: componentName,
-            event: "engine_starting",
+            event: "investment_engine_starting",
             data: [
                 "trading_pairs": config.tradingPairs.map(\.symbol).joined(separator: ","),
-                "min_spread": String(config.thresholds.minimumSpreadPercentage),
-                "max_latency_ms": String(config.thresholds.maximumLatencyMilliseconds)
+                "mode": "investment_data_collection",
+                "arbitrage_disabled": "true"
             ],
             correlationId: correlationId
         )
 
         configManager.logConfiguration(config, logger: logger)
 
-        await setupSignalHandlers()
+        // Signal handlers disabled for investment engine mode
+        // await setupSignalHandlers()
 
         await performanceMonitor.startPeriodicReporting()
 
-        let simulatorTask = tradeSimulator.consumeProfitableStreams(from: spreadDetector)
-        await state.setSimulatorTask(simulatorTask)
+        // All arbitrage components disabled - this is now an investment engine
+        // Focus on data collection for investment analysis only
+
+        logger.info(
+            component: componentName,
+            event: "investment_mode_enabled",
+            data: [
+                "arbitrage_disabled": "true",
+                "data_collection_only": "true"
+            ],
+            correlationId: correlationId
+        )
 
         do {
             try await startConnectors(correlationId: correlationId)
 
             logger.info(
-                component: componentName,
-                event: "engine_started",
-                correlationId: correlationId
+            component: componentName,
+            event: "investment_engine_started",
+            data: [
+            "mode": "data_collection_only",
+            "exchanges": ["kraken", "coinbase", "gemini"].joined(separator: ","),
+            "arbitrage_disabled": "true"
+            ],
+            correlationId: correlationId
             )
         } catch let error as ArbitrageError {
             logger.logError(error, component: componentName, correlationId: correlationId)
@@ -162,21 +187,30 @@ public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
 
         await krakenConnector.disconnect()
         await coinbaseConnector.disconnect()
+        await geminiConnector.disconnect()
 
         await performanceMonitor.stopPeriodicReporting()
 
-        let stats = await tradeSimulator.statistics()
+        if let tradeSimulator = tradeSimulator {
+            let stats = await tradeSimulator.statistics()
         logger.info(
             component: componentName,
             event: "final_statistics",
-            data: [
-                "total_trades": String(stats.totalTrades),
-                "successful_trades": String(stats.successfulTrades),
-                "total_profit": NSDecimalNumber(decimal: stats.totalProfit).stringValue,
-                "current_balance": NSDecimalNumber(decimal: stats.currentBalance).stringValue,
+        data: [
+            "total_trades": String(stats.totalTrades),
+            "successful_trades": String(stats.successfulTrades),
+            "total_profit": NSDecimalNumber(decimal: stats.totalProfit).stringValue,
+            "current_balance": NSDecimalNumber(decimal: stats.currentBalance).stringValue,
                 "success_rate": String(format: "%.2f", stats.successRate * 100)
-            ]
-        )
+                ]
+            )
+        } else {
+            logger.info(
+                component: componentName,
+                event: "no_trade_simulator",
+                data: ["reason": "disabled_in_investment_mode"]
+            )
+        }
 
         logger.info(
             component: componentName,
@@ -226,6 +260,25 @@ public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
                 }
             }
 
+            group.addTask { [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.geminiConnector.connect()
+                    try await self.geminiConnector.subscribeToPairs(pairs)
+                    await self.state.addConnectorTask(self.consumeConnectorStream(self.geminiConnector))
+                } catch let error as ArbitrageError {
+                    self.logger.logError(error, component: self.componentName, correlationId: correlationId)
+                    throw error
+                } catch {
+                    let arbError = ArbitrageError.connection(.failedToConnect(
+                        exchange: "Gemini",
+                        reason: error.localizedDescription
+                    ))
+                    self.logger.logError(arbError, component: self.componentName, correlationId: correlationId)
+                    throw arbError
+                }
+            }
+
             try await group.waitForAll()
         }
     }
@@ -235,38 +288,44 @@ public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
             guard let self else { return }
 
             for await rawPrice in connector.priceUpdates {
-                guard let normalized = await self.normalizer.normalize(rawPrice) else {
+                guard await self.normalizer.normalize(rawPrice) != nil else {
                     continue
                 }
 
-                await self.spreadDetector.ingest(normalized)
+                // Investment engine mode - collect data only, no arbitrage processing
+                // Data available for investment analysis but not processed for arbitrage
             }
         }
     }
 
     private func setupSignalHandlers() async {
-        signal(SIGINT, SIG_IGN)
+    // Skip signal handlers in test environment to avoid interfering with test runner
+        if ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil {
+        return
+    }
+
+    signal(SIGINT, SIG_IGN)
 
         let signalQueue = DispatchQueue(label: "com.mercatus.signal")
-        let source = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
+    let source = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
 
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
+    source.setEventHandler { [weak self] in
+    guard let self else { return }
 
             self.logger.info(
-                component: self.componentName,
-                event: "shutdown_signal_received",
-                data: ["signal": "SIGINT"]
-            )
+        component: self.componentName,
+    event: "shutdown_signal_received",
+    data: ["signal": "SIGINT"]
+    )
 
             Task {
-                await self.stop()
-                exit(0)
+            await self.stop()
+            exit(0)
             }
-        }
+    }
 
-        source.resume()
-        await state.setSignalSource(source)
+    source.resume()
+    await state.setSignalSource(source)
 
         logger.info(
             component: componentName,
@@ -374,5 +433,9 @@ public final class LiveArbitrageEngine: ArbitrageEngine, Sendable {
             ))
             logger.logError(arbError, component: componentName, correlationId: correlationId)
         }
+    }
+
+    private func decimalString(_ value: Decimal) -> String {
+        NSDecimalNumber(decimal: value).stringValue
     }
 }

@@ -8,3 +8,14 @@ DerivedData/
 .netrc
 .env
 .kiro
+.keys/
+config/
+logs/
+*.log
+GEMINI.md
+AGENTS.md
+Package.resolved
+scripts/
+docker/
+docs/
+.vscode/

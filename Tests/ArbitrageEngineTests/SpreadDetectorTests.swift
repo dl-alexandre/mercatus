@@ -467,6 +467,7 @@ struct SpreadDetectorTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(
                 minimumSpreadPercentage: minSpread,

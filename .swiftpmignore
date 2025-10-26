@@ -1,0 +1,5 @@
+Sources/SmartVestor/CLI/
+Sources/SmartVestor/CLI/*
+Sources/SmartVestor/CLI/**/*
+**/CLI/
+**/CLI/**

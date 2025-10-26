@@ -10,13 +10,13 @@ Task {
     do {
         let config = try configurationManager.load()
 
-        let engine = LiveArbitrageEngine(
+        let engine = LiveInvestmentEngine(
             config: config,
             logger: logger,
             configManager: configurationManager
         )
 
-        logger.info(component: "Runtime", event: "engine_initializing")
+        logger.info(component: "Runtime", event: "investment_engine_initializing")
 
         try await engine.start()
 

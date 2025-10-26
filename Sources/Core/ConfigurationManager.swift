@@ -33,6 +33,7 @@ public final class ConfigurationManager: @unchecked Sendable {
             "binanceApiKey": config.binanceCredentials.maskedKey,
             "coinbaseApiKey": config.coinbaseCredentials.maskedKey,
             "krakenApiKey": config.krakenCredentials.maskedKey,
+            "geminiApiKey": config.geminiCredentials.maskedKey,
             "tradingPairs": config.tradingPairs.map(\.symbol).joined(separator: ","),
             "spreadThreshold": String(config.thresholds.minimumSpreadPercentage),
             "maxLatencyMs": String(config.thresholds.maximumLatencyMilliseconds),
@@ -77,6 +78,8 @@ public final class ConfigurationManager: @unchecked Sendable {
         let coinbaseSecret = environment["ARBITRAGE_COINBASE_API_SECRET"] ?? ""
         let krakenKey = environment["ARBITRAGE_KRAKEN_API_KEY"] ?? ""
         let krakenSecret = environment["ARBITRAGE_KRAKEN_API_SECRET"] ?? ""
+        let geminiKey = environment["ARBITRAGE_GEMINI_API_KEY"] ?? ""
+        let geminiSecret = environment["ARBITRAGE_GEMINI_API_SECRET"] ?? ""
 
         let pairsString = environment["ARBITRAGE_TRADING_PAIRS"] ?? ""
         let pairTokens = pairsString
@@ -110,6 +113,7 @@ public final class ConfigurationManager: @unchecked Sendable {
             binanceCredentials: .init(apiKey: binanceKey, apiSecret: binanceSecret),
             coinbaseCredentials: .init(apiKey: coinbaseKey, apiSecret: coinbaseSecret),
             krakenCredentials: .init(apiKey: krakenKey, apiSecret: krakenSecret),
+            geminiCredentials: .init(apiKey: geminiKey, apiSecret: geminiSecret),
             tradingPairs: tradingPairs,
             thresholds: thresholds,
             defaults: defaults

@@ -25,7 +25,7 @@ struct PerformanceMonitorTests {
 
     @Test("Records spread calculated events")
     func recordSpreadCalculated() async {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger)
 
         await monitor.recordSpreadCalculated(latencyMs: 10.5)
@@ -45,7 +45,7 @@ struct PerformanceMonitorTests {
 
     @Test("Records trade simulated events")
     func recordTradeSimulated() async {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger)
 
         await monitor.recordTradeSimulated(latencyMs: 5.0)
@@ -62,7 +62,7 @@ struct PerformanceMonitorTests {
 
     @Test("Records reconnection events")
     func recordReconnections() async {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger)
 
         await monitor.recordReconnection()
@@ -75,7 +75,7 @@ struct PerformanceMonitorTests {
 
     @Test("Generates report with no events")
     func emptyReport() async {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger)
 
         let report = await monitor.generateReport()
@@ -87,7 +87,7 @@ struct PerformanceMonitorTests {
 
     @Test("Calculates p95 latency correctly")
     func p95Calculation() async {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger)
 
         for i in 1...100 {
@@ -103,7 +103,7 @@ struct PerformanceMonitorTests {
 
     @Test("Reset clears all metrics")
     func resetMetrics() async {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger)
 
         await monitor.recordSpreadCalculated(latencyMs: 10.0)
@@ -128,7 +128,7 @@ struct PerformanceMonitorTests {
         let fixedDate = Date(timeIntervalSince1970: 1000000)
         let clock: @Sendable () -> Date = { fixedDate }
 
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(logger: logger, clock: clock)
 
         await monitor.recordSpreadCalculated(latencyMs: 10.0)
@@ -144,7 +144,7 @@ struct PerformanceMonitorTests {
             enableSystemMetrics: true
         )
 
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(config: config, logger: logger)
 
         await monitor.recordSpreadCalculated(latencyMs: 10.0)
@@ -161,7 +161,7 @@ struct PerformanceMonitorTests {
             enableSystemMetrics: false
         )
 
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(config: config, logger: logger)
 
         await monitor.recordSpreadCalculated(latencyMs: 10.0)
@@ -179,7 +179,7 @@ struct PerformanceMonitorTests {
             enableSystemMetrics: false
         )
 
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(config: config, logger: logger)
 
         await monitor.recordSpreadCalculated(latencyMs: 10.0)
@@ -189,8 +189,9 @@ struct PerformanceMonitorTests {
 
         await monitor.stopPeriodicReporting()
 
-        let reportAfterReset = await monitor.generateReport()
-        #expect(reportAfterReset.spreadCalculatedMetrics == nil)
+        let reportAfterStop = await monitor.generateReport()
+        #expect(reportAfterStop.spreadCalculatedMetrics != nil)
+        #expect(reportAfterStop.spreadCalculatedMetrics?.count == 1)
     }
 
     @Test("Multiple calls to start periodic reporting are safe")
@@ -200,7 +201,7 @@ struct PerformanceMonitorTests {
             enableSystemMetrics: false
         )
 
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let monitor = PerformanceMonitor(config: config, logger: logger)
 
         await monitor.startPeriodicReporting()

@@ -9,7 +9,7 @@ struct CircuitBreakerIntegrationTests {
 
     @Test("BaseExchangeConnector uses circuit breaker to prevent connections")
     func baseExchangeConnectorUsesCircuitBreaker() async throws {
-        let logger = StructuredLogger()
+        let logger = createTestLogger()
         let attemptCounter = SyncAttemptCounter()
 
         let requestBuilder: BaseExchangeConnector.RequestBuilder = { [attemptCounter] _ in

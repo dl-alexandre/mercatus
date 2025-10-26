@@ -400,4 +400,21 @@ public actor BaseExchangeConnector: ExchangeConnector {
             return ["status": "failed", "reason": reason]
         }
     }
+
+    // MARK: - Trading Methods (Default implementations)
+
+    public func getOrderBook(symbol: String) async throws -> OrderBook {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BaseExchangeConnector", reason: "getOrderBook not implemented for \(name)"))
+    }
+
+    public func getRecentTransactions(limit: Int) async throws -> [Transaction] {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BaseExchangeConnector", reason: "getRecentTransactions not implemented for \(name)"))
+    }
+
+    public func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BaseExchangeConnector", reason: "placeOrder not implemented for \(name)"))
+    }
 }

@@ -159,6 +159,44 @@ private final class StubConnector: ExchangeConnector, @unchecked Sendable {
         priceContinuation.finish()
         eventContinuation.finish()
     }
+
+    func getOrderBook(symbol: String) async throws -> OrderBook {
+        let bids = [
+            OrderBookEntry(price: 49900.0, quantity: 0.5),
+            OrderBookEntry(price: 49800.0, quantity: 1.0)
+        ]
+        let asks = [
+            OrderBookEntry(price: 50100.0, quantity: 0.3),
+            OrderBookEntry(price: 50200.0, quantity: 0.8)
+        ]
+        return OrderBook(bids: bids, asks: asks)
+    }
+
+    func getRecentTransactions(limit: Int) async throws -> [Transaction] {
+        return [
+            Transaction(
+                id: "tx1",
+                type: .buy,
+                asset: "BTC-USD",
+                quantity: 0.1,
+                price: 50000.0,
+                timestamp: Date()
+            )
+        ]
+    }
+
+    func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order {
+        return Order(
+            id: UUID().uuidString,
+            symbol: symbol,
+            side: side,
+            type: type,
+            quantity: quantity,
+            price: price,
+            status: .filled,
+            timestamp: Date()
+        )
+    }
 }
 
 private final class FailingConnector: ExchangeConnector, @unchecked Sendable {
@@ -191,6 +229,41 @@ private final class FailingConnector: ExchangeConnector, @unchecked Sendable {
 
     func subscribeToPairs(_ pairs: [String]) async throws {
         throw error
+    }
+
+    // MARK: - Trading Methods (Mock implementations)
+
+    func getOrderBook(symbol: String) async throws -> OrderBook {
+        return OrderBook(
+            bids: [OrderBookEntry(price: 50000.0, quantity: 1.0)],
+            asks: [OrderBookEntry(price: 50001.0, quantity: 1.0)]
+        )
+    }
+
+    func getRecentTransactions(limit: Int) async throws -> [Transaction] {
+        return [
+            Transaction(
+                id: "tx1",
+                type: .buy,
+                asset: "BTC-USD",
+                quantity: 0.1,
+                price: 50000.0,
+                timestamp: Date()
+            )
+        ]
+    }
+
+    func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order {
+        return Order(
+            id: UUID().uuidString,
+            symbol: symbol,
+            side: side,
+            type: type,
+            quantity: quantity,
+            price: price,
+            status: .filled,
+            timestamp: Date()
+        )
     }
 }
 

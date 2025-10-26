@@ -12,6 +12,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "binance_key_123", apiSecret: "binance_secret_456"),
             coinbaseCredentials: .init(apiKey: "coinbase_key_789", apiSecret: "coinbase_secret_012"),
             krakenCredentials: .init(apiKey: "kraken_key_345", apiSecret: "kraken_secret_678"),
+            geminiCredentials: .init(apiKey: "gemini_key_901", apiSecret: "gemini_secret_234"),
             tradingPairs: [
                 TradingPair(base: "BTC", quote: "USD"),
                 TradingPair(base: "ETH", quote: "USD")
@@ -32,6 +33,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -48,6 +50,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: ""),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -64,6 +67,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "   ", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -80,6 +84,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "", apiSecret: ""),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -96,6 +101,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -162,6 +168,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.0, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -178,6 +185,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: -0.5, maximumLatencyMilliseconds: 150),
             defaults: .init()
@@ -194,6 +202,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 0.0),
             defaults: .init()
@@ -210,6 +219,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: -150),
             defaults: .init()
@@ -226,6 +236,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init(virtualUSDStartingBalance: 0.0)
@@ -242,6 +253,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init(virtualUSDStartingBalance: -1000)
@@ -296,6 +308,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key1", apiSecret: "secret1"),
             coinbaseCredentials: .init(apiKey: "key2", apiSecret: "secret2"),
             krakenCredentials: .init(apiKey: "key3", apiSecret: "secret3"),
+            geminiCredentials: .init(apiKey: "key4", apiSecret: "secret4"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init(virtualUSDStartingBalance: 10_000)
@@ -305,6 +318,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key1", apiSecret: "secret1"),
             coinbaseCredentials: .init(apiKey: "key2", apiSecret: "secret2"),
             krakenCredentials: .init(apiKey: "key3", apiSecret: "secret3"),
+            geminiCredentials: .init(apiKey: "key4", apiSecret: "secret4"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init(virtualUSDStartingBalance: 10_000)
@@ -314,6 +328,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "different", apiSecret: "secret1"),
             coinbaseCredentials: .init(apiKey: "key2", apiSecret: "secret2"),
             krakenCredentials: .init(apiKey: "key3", apiSecret: "secret3"),
+            geminiCredentials: .init(apiKey: "key4", apiSecret: "secret4"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
             thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150),
             defaults: .init(virtualUSDStartingBalance: 10_000)
@@ -343,6 +358,7 @@ struct ConfigurationValidationTests {
             binanceCredentials: .init(apiKey: "key", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [
                 TradingPair(base: "BTC", quote: "USD"),
                 TradingPair(base: "ETH", quote: "ETH")
@@ -369,6 +385,8 @@ struct ConfigurationManagerTests {
             "ARBITRAGE_COINBASE_API_SECRET": "coinbase_secret",
             "ARBITRAGE_KRAKEN_API_KEY": "kraken_key",
             "ARBITRAGE_KRAKEN_API_SECRET": "kraken_secret",
+            "ARBITRAGE_GEMINI_API_KEY": "gemini_key",
+            "ARBITRAGE_GEMINI_API_SECRET": "gemini_secret",
             "ARBITRAGE_TRADING_PAIRS": "BTC-USD,ETH-USD,DOGE-USDT",
             "ARBITRAGE_MIN_SPREAD_PERCENT": "0.75",
             "ARBITRAGE_MAX_LATENCY_MS": "200",
@@ -400,6 +418,8 @@ struct ConfigurationManagerTests {
             "ARBITRAGE_COINBASE_API_SECRET": "secret2",
             "ARBITRAGE_KRAKEN_API_KEY": "key3",
             "ARBITRAGE_KRAKEN_API_SECRET": "secret3",
+            "ARBITRAGE_GEMINI_API_KEY": "key4",
+            "ARBITRAGE_GEMINI_API_SECRET": "secret4",
             "ARBITRAGE_TRADING_PAIRS": "BTC-USD"
         ]
 
@@ -420,6 +440,8 @@ struct ConfigurationManagerTests {
             "ARBITRAGE_COINBASE_API_SECRET": "secret",
             "ARBITRAGE_KRAKEN_API_KEY": "key",
             "ARBITRAGE_KRAKEN_API_SECRET": "secret",
+            "ARBITRAGE_GEMINI_API_KEY": "key",
+            "ARBITRAGE_GEMINI_API_SECRET": "secret",
             "ARBITRAGE_TRADING_PAIRS": "BTC/USD,ETH/EUR"
         ]
 
@@ -440,6 +462,8 @@ struct ConfigurationManagerTests {
             "ARBITRAGE_COINBASE_API_SECRET": "secret",
             "ARBITRAGE_KRAKEN_API_KEY": "key",
             "ARBITRAGE_KRAKEN_API_SECRET": "secret",
+            "ARBITRAGE_GEMINI_API_KEY": "key",
+            "ARBITRAGE_GEMINI_API_SECRET": "secret",
             "ARBITRAGE_TRADING_PAIRS": "BTC-USD, , ETH-USD,  "
         ]
 
@@ -472,6 +496,8 @@ struct ConfigurationManagerTests {
             "ARBITRAGE_COINBASE_API_SECRET": "secret",
             "ARBITRAGE_KRAKEN_API_KEY": "key",
             "ARBITRAGE_KRAKEN_API_SECRET": "secret",
+            "ARBITRAGE_GEMINI_API_KEY": "key",
+            "ARBITRAGE_GEMINI_API_SECRET": "secret",
             "ARBITRAGE_TRADING_PAIRS": ""
         ]
 
@@ -497,6 +523,10 @@ struct ConfigurationManagerTests {
             "krakenCredentials": {
                 "apiKey": "json_kraken_key",
                 "apiSecret": "json_kraken_secret"
+            },
+            "geminiCredentials": {
+                "apiKey": "json_gemini_key",
+                "apiSecret": "json_gemini_secret"
             },
             "tradingPairs": [
                 {"base": "BTC", "quote": "USD"},
@@ -567,6 +597,10 @@ struct ConfigurationManagerTests {
                 "apiKey": "file_key",
                 "apiSecret": "file_secret"
             },
+            "geminiCredentials": {
+                "apiKey": "file_key",
+                "apiSecret": "file_secret"
+            },
             "tradingPairs": [
                 {"base": "BTC", "quote": "USD"}
             ],
@@ -589,6 +623,8 @@ struct ConfigurationManagerTests {
             "ARBITRAGE_COINBASE_API_SECRET": "env_secret",
             "ARBITRAGE_KRAKEN_API_KEY": "env_key",
             "ARBITRAGE_KRAKEN_API_SECRET": "env_secret",
+            "ARBITRAGE_GEMINI_API_KEY": "env_key",
+            "ARBITRAGE_GEMINI_API_SECRET": "env_secret",
             "ARBITRAGE_TRADING_PAIRS": "ETH-USD"
         ]
 

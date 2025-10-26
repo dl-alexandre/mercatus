@@ -9,6 +9,8 @@ public final class StructuredLogger {
         case error = "ERROR"
     }
 
+    private let enabled: Bool
+
     private struct LogEnvelope: Encodable {
         let schemaVersion: String
         let id: String
@@ -31,9 +33,10 @@ public final class StructuredLogger {
     private var lastDropWarningTime: TimeInterval = 0
     private let dropWarningInterval: TimeInterval = 60
 
-    public init(maxLogsPerMinute: Int = 1000, clock: @escaping @Sendable () -> Date = Date.init) {
+    public init(maxLogsPerMinute: Int = 1000, clock: @escaping @Sendable () -> Date = Date.init, enabled: Bool = true) {
         self.maxLogsPerMinute = max(1, maxLogsPerMinute)
         self.clock = clock
+        self.enabled = enabled
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = []
@@ -56,6 +59,7 @@ public final class StructuredLogger {
         id: String = UUID().uuidString,
         correlationId: String? = nil
     ) {
+        guard enabled else { return }
         queue.async { [weak self] in
             guard let self else { return }
             let now = self.clock()
@@ -109,6 +113,7 @@ public final class StructuredLogger {
         id: String = UUID().uuidString,
         correlationId: String? = nil
     ) {
+        guard enabled else { return }
         let stringData = encodeToStringDictionary(data)
         log(level: level, component: component, event: event, data: stringData, id: id, correlationId: correlationId)
     }
@@ -230,3 +235,7 @@ public final class StructuredLogger {
 }
 
 extension StructuredLogger: @unchecked Sendable {}
+
+public func createTestLogger() -> StructuredLogger {
+    return StructuredLogger(maxLogsPerMinute: 1000, enabled: false)
+}

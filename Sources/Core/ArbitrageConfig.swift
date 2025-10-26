@@ -37,6 +37,7 @@ public struct ArbitrageConfig: Codable, Equatable, Sendable {
         case binanceCredentials
         case coinbaseCredentials
         case krakenCredentials
+        case geminiCredentials
         case tradingPairs
         case thresholds
         case defaults
@@ -103,6 +104,7 @@ public struct ArbitrageConfig: Codable, Equatable, Sendable {
     public let binanceCredentials: ExchangeCredentials
     public let coinbaseCredentials: ExchangeCredentials
     public let krakenCredentials: ExchangeCredentials
+    public let geminiCredentials: ExchangeCredentials
     public let tradingPairs: [TradingPair]
     public let thresholds: Thresholds
     public let defaults: Defaults
@@ -111,6 +113,7 @@ public struct ArbitrageConfig: Codable, Equatable, Sendable {
         binanceCredentials: ExchangeCredentials,
         coinbaseCredentials: ExchangeCredentials,
         krakenCredentials: ExchangeCredentials,
+        geminiCredentials: ExchangeCredentials,
         tradingPairs: [TradingPair],
         thresholds: Thresholds,
         defaults: Defaults = Defaults()
@@ -118,6 +121,7 @@ public struct ArbitrageConfig: Codable, Equatable, Sendable {
         self.binanceCredentials = binanceCredentials
         self.coinbaseCredentials = coinbaseCredentials
         self.krakenCredentials = krakenCredentials
+        self.geminiCredentials = geminiCredentials
         self.tradingPairs = tradingPairs
         self.thresholds = thresholds
         self.defaults = defaults
@@ -128,6 +132,7 @@ public struct ArbitrageConfig: Codable, Equatable, Sendable {
         binanceCredentials = try container.decode(ExchangeCredentials.self, forKey: .binanceCredentials)
         coinbaseCredentials = try container.decode(ExchangeCredentials.self, forKey: .coinbaseCredentials)
         krakenCredentials = try container.decode(ExchangeCredentials.self, forKey: .krakenCredentials)
+        geminiCredentials = try container.decode(ExchangeCredentials.self, forKey: .geminiCredentials)
         tradingPairs = try container.decode([TradingPair].self, forKey: .tradingPairs)
         thresholds = try container.decode(Thresholds.self, forKey: .thresholds)
         defaults = try container.decodeIfPresent(Defaults.self, forKey: .defaults) ?? Defaults()
@@ -137,6 +142,7 @@ public struct ArbitrageConfig: Codable, Equatable, Sendable {
         try binanceCredentials.validate(exchange: "Binance")
         try coinbaseCredentials.validate(exchange: "Coinbase")
         try krakenCredentials.validate(exchange: "Kraken")
+        try geminiCredentials.validate(exchange: "Gemini")
 
         guard !tradingPairs.isEmpty else {
             throw ConfigurationError.noTradingPairs

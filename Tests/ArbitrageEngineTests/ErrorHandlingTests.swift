@@ -198,7 +198,7 @@ struct ErrorHandlingTests {
         func includesCorrelationId() async throws {
             var expectation = Expectation()
 
-            let logger = StructuredLogger()
+            let logger = createTestLogger()
 
             let correlationId = "test-correlation-123"
             logger.info(
@@ -215,7 +215,7 @@ struct ErrorHandlingTests {
 
         @Test("Logger handles ArbitrageError correctly")
         func handlesArbitrageError() async throws {
-            let logger = StructuredLogger()
+            let logger = createTestLogger()
             let error = ArbitrageError.connection(.failedToConnect(exchange: "TestExchange", reason: "timeout"))
             let correlationId = "error-test-456"
 
@@ -234,6 +234,7 @@ struct ErrorHandlingTests {
                 binanceCredentials: .init(apiKey: "", apiSecret: "secret"),
             coinbaseCredentials: .init(apiKey: "key", apiSecret: "secret"),
             krakenCredentials: .init(apiKey: "key", apiSecret: "secret"),
+            geminiCredentials: .init(apiKey: "key", apiSecret: "secret"),
             tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
                 thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150)
             )
@@ -249,6 +250,7 @@ struct ErrorHandlingTests {
                 binanceCredentials: .init(apiKey: "key1", apiSecret: "secret1"),
                 coinbaseCredentials: .init(apiKey: "key2", apiSecret: "secret2"),
                 krakenCredentials: .init(apiKey: "key3", apiSecret: "secret3"),
+                geminiCredentials: .init(apiKey: "key4", apiSecret: "secret4"),
                 tradingPairs: [],
                 thresholds: .init(minimumSpreadPercentage: 0.5, maximumLatencyMilliseconds: 150)
             )
@@ -264,6 +266,7 @@ struct ErrorHandlingTests {
                 binanceCredentials: .init(apiKey: "key1", apiSecret: "secret1"),
                 coinbaseCredentials: .init(apiKey: "key2", apiSecret: "secret2"),
                 krakenCredentials: .init(apiKey: "key3", apiSecret: "secret3"),
+                geminiCredentials: .init(apiKey: "key4", apiSecret: "secret4"),
                 tradingPairs: [TradingPair(base: "BTC", quote: "USD")],
                 thresholds: .init(minimumSpreadPercentage: -1.0, maximumLatencyMilliseconds: 150)
             )

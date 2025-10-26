@@ -358,6 +358,23 @@ public final class BinanceConnector: ExchangeConnector, @unchecked Sendable {
 
         return symbol
     }
+
+    // MARK: - Trading Methods (Default implementations)
+
+    public func getOrderBook(symbol: String) async throws -> OrderBook {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BinanceConnector", reason: "getOrderBook not implemented for \(name)"))
+    }
+
+    public func getRecentTransactions(limit: Int) async throws -> [Transaction] {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BinanceConnector", reason: "getRecentTransactions not implemented for \(name)"))
+    }
+
+    public func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BinanceConnector", reason: "placeOrder not implemented for \(name)"))
+    }
 }
 
 private final class WeakBox<T: AnyObject>: @unchecked Sendable {

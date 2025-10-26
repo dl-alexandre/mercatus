@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Core
 import Connectors
@@ -91,5 +92,40 @@ private final class MockConnector: ExchangeConnector, @unchecked Sendable {
 
     func subscribeToPairs(_ pairs: [String]) async throws {
         // no-op in tests
+    }
+
+    // MARK: - Trading Methods (Mock implementations)
+
+    func getOrderBook(symbol: String) async throws -> OrderBook {
+        return OrderBook(
+            bids: [OrderBookEntry(price: 50000.0, quantity: 1.0)],
+            asks: [OrderBookEntry(price: 50001.0, quantity: 1.0)]
+        )
+    }
+
+    func getRecentTransactions(limit: Int) async throws -> [Transaction] {
+        return [
+            Transaction(
+                id: "tx1",
+                type: .buy,
+                asset: "BTC-USD",
+                quantity: 0.1,
+                price: 50000.0,
+                timestamp: Date()
+            )
+        ]
+    }
+
+    func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order {
+        return Order(
+            id: UUID().uuidString,
+            symbol: symbol,
+            side: side,
+            type: type,
+            quantity: quantity,
+            price: price,
+            status: .filled,
+            timestamp: Date()
+        )
     }
 }
