@@ -111,57 +111,72 @@ public class InferenceService: InferenceServiceProtocol {
 public class MockCacheManager: CacheManagerProtocol {
     private var cache: [String: (value: Data, expiry: Date)] = [:]
     private let logger: StructuredLogger
+    private let cacheQueue = DispatchQueue(label: "MockCacheManager.queue", attributes: .concurrent)
 
     public init(logger: StructuredLogger) {
         self.logger = logger
     }
 
     public func get<T: Codable>(key: String, type: T.Type) async throws -> T? {
-        guard let cached = cache[key],
-              cached.expiry > Date() else {
-            return nil
-        }
+        return try await cacheQueue.sync {
+            guard let cached = cache[key],
+                  cached.expiry > Date() else {
+                return nil
+            }
 
-        return try JSONDecoder().decode(type, from: cached.value)
+            return try JSONDecoder().decode(type, from: cached.value)
+        }
     }
 
     public func set<T: Codable>(key: String, value: T, ttl: TimeInterval) async throws {
         let data = try JSONEncoder().encode(value)
         let expiry = Date().addingTimeInterval(ttl)
-        cache[key] = (data, expiry)
+
+        await cacheQueue.sync {
+            cache[key] = (data, expiry)
+        }
     }
 
     public func invalidate(key: String) async throws {
-        cache.removeValue(forKey: key)
+        await cacheQueue.sync {
+            cache.removeValue(forKey: key)
+        }
     }
 
     public func invalidatePattern(pattern: String) async throws {
         let regex = try NSRegularExpression(pattern: pattern)
-        let keysToRemove = cache.keys.filter { key in
-            let range = NSRange(location: 0, length: key.utf16.count)
-            return regex.firstMatch(in: key, options: [], range: range) != nil
+
+        let keysToRemove = await cacheQueue.sync {
+            cache.keys.filter { key in
+                let range = NSRange(location: 0, length: key.utf16.count)
+                return regex.firstMatch(in: key, options: [], range: range) != nil
+            }
         }
 
-        for key in keysToRemove {
-            cache.removeValue(forKey: key)
+        await cacheQueue.sync {
+            for key in keysToRemove {
+                cache.removeValue(forKey: key)
+            }
         }
     }
 
     public func getCacheStats() -> CacheStats {
         let now = Date()
-        _ = cache.values.filter { $0.expiry > now }
-        let hitRate = 0.85 // Mock hit rate
-        let missRate = 1.0 - hitRate
-        let totalKeys = cache.count
-        let memoryUsage = Int64(cache.values.map { $0.value.count }.reduce(0, +))
+        return cacheQueue.sync {
+            _ = cache.values.filter { $0.expiry > now }
+            let hitRate = 0.85
+            let missRate = 1.0 - hitRate
+            let totalKeys = cache.count
+            let memoryUsage = Int64(cache.values.map { $0.value.count }.reduce(0, +))
 
-        return CacheStats(
-            hitRate: hitRate,
-            missRate: missRate,
-            totalKeys: totalKeys,
-            memoryUsage: memoryUsage,
-            lastUpdated: now
-        )
+            return CacheStats(
+                hitRate: hitRate,
+                missRate: missRate,
+                totalKeys: totalKeys,
+                memoryUsage: memoryUsage,
+                lastUpdated: now
+            )
+        }
     }
 }
 
