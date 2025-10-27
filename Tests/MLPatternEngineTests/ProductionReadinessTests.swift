@@ -381,8 +381,8 @@ struct ProductionReadinessTests {
     // MARK: - Helper Methods
 
     private func getMemoryInfo() -> (used: Int64, total: Int64) {
-        let totalMemory = Int64(8 * 1024 * 1024 * 1024) // 8GB mock
-        let usedMemory = Int64.random(in: 2_000_000_000...6_000_000_000) // 2-6GB
+        let totalMemory = Int64(8 * 1024 * 1024 * 1024)
+        let usedMemory = Int64(4 * 1024 * 1024 * 1024)
         return (used: usedMemory, total: totalMemory)
     }
 }

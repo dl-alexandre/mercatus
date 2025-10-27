@@ -47,25 +47,37 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
         let historicalDataMap = try await batchFetchHistoricalData(symbols: symbols, days: 30)
         let shortHistoricalDataMap = try await batchFetchHistoricalData(symbols: symbols, days: 7)
 
-        // Process coins sequentially but with batched data fetching
-        var allScores: [CoinScore] = []
+        var allScores = try await withThrowingTaskGroup(of: CoinScore?.self) { group in
+            var results: [CoinScore] = []
 
-        for symbol in symbols {
-            do {
-                let score = try await scoreCoinOptimized(
-                    symbol: symbol,
-                    marketData: marketDataMap[symbol],
-                    historicalData: historicalDataMap[symbol],
-                    shortHistoricalData: shortHistoricalDataMap[symbol]
-                )
-                allScores.append(score)
-                cachedScores[symbol] = score
-            } catch {
-                logger.warn(component: "CoinScoringEngine", event: "Failed to score coin", data: [
-                    "symbol": symbol,
-                    "error": error.localizedDescription
-                ])
+            for symbol in symbols {
+                group.addTask { [symbol] in
+                    do {
+                        let score = try await self.scoreCoinOptimized(
+                            symbol: symbol,
+                            marketData: marketDataMap[symbol],
+                            historicalData: historicalDataMap[symbol],
+                            shortHistoricalData: shortHistoricalDataMap[symbol]
+                        )
+                        return score
+                    } catch {
+                        self.logger.warn(component: "CoinScoringEngine", event: "Failed to score coin", data: [
+                            "symbol": symbol,
+                            "error": error.localizedDescription
+                        ])
+                        return nil
+                    }
+                }
             }
+
+            for try await result in group {
+                if let score = result {
+                    results.append(score)
+                    cachedScores[score.symbol] = score
+                }
+            }
+
+            return results
         }
 
         allScores.sort { $0.totalScore > $1.totalScore }

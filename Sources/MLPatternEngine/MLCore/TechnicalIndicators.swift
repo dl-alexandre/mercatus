@@ -1,4 +1,5 @@
 import Foundation
+import Accelerate
 
 public class TechnicalIndicators: TechnicalIndicatorsProtocol {
 
@@ -7,26 +8,38 @@ public class TechnicalIndicators: TechnicalIndicatorsProtocol {
     public func calculateRSI(prices: [Double], period: Int = 14) -> [Double] {
         guard prices.count > period else { return [] }
 
-        var rsi: [Double] = []
-        var gains: [Double] = []
-        var losses: [Double] = []
+        let count = prices.count
+        var gains = [Double](repeating: 0, count: count - 1)
+        var losses = [Double](repeating: 0, count: count - 1)
 
-        for i in 1..<prices.count {
+        for i in 1..<count {
             let change = prices[i] - prices[i-1]
-            gains.append(max(0, change))
-            losses.append(max(0, -change))
+            gains[i-1] = max(0, change)
+            losses[i-1] = max(0, -change)
         }
 
-        for i in period-1..<gains.count {
-            let avgGain = gains[(i-period+1)...i].reduce(0, +) / Double(period)
-            let avgLoss = losses[(i-period+1)...i].reduce(0, +) / Double(period)
+        let rsiCount = gains.count - period + 1
+        var rsi = [Double](repeating: 0, count: rsiCount)
+
+        for i in 0..<rsiCount {
+            let start = i
+            let end = i + period
+
+            var avgGain: Double = 0.0
+            var avgLoss: Double = 0.0
+
+            gains[start..<end].withUnsafeBufferPointer { buffer in
+                vDSP_meanvD(buffer.baseAddress!, 1, &avgGain, vDSP_Length(period))
+            }
+            losses[start..<end].withUnsafeBufferPointer { buffer in
+                vDSP_meanvD(buffer.baseAddress!, 1, &avgLoss, vDSP_Length(period))
+            }
 
             if avgLoss == 0 {
-                rsi.append(100.0)
+                rsi[i] = 100.0
             } else {
                 let rs = avgGain / avgLoss
-                let rsiValue = 100.0 - (100.0 / (1.0 + rs))
-                rsi.append(rsiValue)
+                rsi[i] = 100.0 - (100.0 / (1.0 + rs))
             }
         }
 
@@ -74,23 +87,31 @@ public class TechnicalIndicators: TechnicalIndicatorsProtocol {
     public func calculateBollingerBands(prices: [Double], period: Int = 20, standardDeviations: Double = 2.0) -> (upper: [Double], middle: [Double], lower: [Double]) {
         guard prices.count >= period else { return ([], [], []) }
 
-        var upper: [Double] = []
-        var middle: [Double] = []
-        var lower: [Double] = []
+        let resultCount = prices.count - period + 1
+        var upper = [Double](repeating: 0, count: resultCount)
+        var middle = [Double](repeating: 0, count: resultCount)
+        var lower = [Double](repeating: 0, count: resultCount)
 
-        for i in (period-1)..<prices.count {
-            let periodPrices = Array(prices[(i-period+1)...i])
-            let sma = periodPrices.reduce(0, +) / Double(period)
+        for i in 0..<resultCount {
+            let start = i
+            let end = i + period
 
-            let variance = periodPrices.map { pow($0 - sma, 2) }.reduce(0, +) / Double(period)
+            var sma: Double = 0.0
+            prices[start..<end].withUnsafeBufferPointer { buffer in
+                vDSP_meanvD(buffer.baseAddress!, 1, &sma, vDSP_Length(period))
+            }
+
+            let tempArray = Array(prices[start..<end]).map { pow($0 - sma, 2) }
+            var varianceSum: Double = 0.0
+            tempArray.withUnsafeBufferPointer { buffer in
+                vDSP_sveD(buffer.baseAddress!, 1, &varianceSum, vDSP_Length(period))
+            }
+            let variance = varianceSum / Double(period)
             let standardDeviation = sqrt(variance)
 
-            let upperBand = sma + (standardDeviations * standardDeviation)
-            let lowerBand = sma - (standardDeviations * standardDeviation)
-
-            upper.append(upperBand)
-            middle.append(sma)
-            lower.append(lowerBand)
+            middle[i] = sma
+            upper[i] = sma + (standardDeviations * standardDeviation)
+            lower[i] = sma - (standardDeviations * standardDeviation)
         }
 
         return (upper, middle, lower)
@@ -100,18 +121,23 @@ public class TechnicalIndicators: TechnicalIndicatorsProtocol {
         guard high.count == low.count && low.count == close.count,
               high.count >= kPeriod else { return ([], []) }
 
-        var kValues: [Double] = []
+        let kCount = close.count - kPeriod + 1
+        var kValues = [Double](repeating: 0, count: kCount)
 
-        for i in (kPeriod-1)..<close.count {
-            let periodHigh = Array(high[(i-kPeriod+1)...i])
-            let periodLow = Array(low[(i-kPeriod+1)...i])
-            let currentClose = close[i]
+        for i in 0..<kCount {
+            let start = i
+            let end = i + kPeriod
 
-            let highestHigh = periodHigh.max() ?? 0
-            let lowestLow = periodLow.min() ?? 0
+            var highestHigh = high[start]
+            var lowestLow = low[start]
 
-            let kValue = highestHigh == lowestLow ? 50.0 : ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100.0
-            kValues.append(kValue)
+            for j in start..<end {
+                if high[j] > highestHigh { highestHigh = high[j] }
+                if low[j] < lowestLow { lowestLow = low[j] }
+            }
+
+            let currentClose = close[end - 1]
+            kValues[i] = highestHigh == lowestLow ? 50.0 : ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100.0
         }
 
         let dValues = calculateSMA(prices: kValues, period: dPeriod)
@@ -147,12 +173,18 @@ public class TechnicalIndicators: TechnicalIndicatorsProtocol {
     private func calculateSMA(prices: [Double], period: Int) -> [Double] {
         guard prices.count >= period else { return [] }
 
-        var sma: [Double] = []
+        let smaCount = prices.count - period + 1
+        var sma = [Double](repeating: 0, count: smaCount)
 
-        for i in (period-1)..<prices.count {
-            let periodPrices = Array(prices[(i-period+1)...i])
-            let average = periodPrices.reduce(0, +) / Double(period)
-            sma.append(average)
+        for i in 0..<smaCount {
+            let start = i
+            let end = i + period
+
+            var avg: Double = 0.0
+            prices[start..<end].withUnsafeBufferPointer { buffer in
+                vDSP_meanvD(buffer.baseAddress!, 1, &avg, vDSP_Length(period))
+            }
+            sma[i] = avg
         }
 
         return sma

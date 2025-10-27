@@ -74,18 +74,30 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
 
         _ = try await mlEngine.getLatestData(symbols: symbolsWithUSD)
 
-        var coinScores: [CoinScore] = []
+        var coinScores = try await withThrowingTaskGroup(of: CoinScore?.self) { group in
+            var results: [CoinScore] = []
 
-        for symbol in supportedSymbols {
-            do {
-                let score = try await scoreCoin(symbol: symbol)
-                coinScores.append(score)
-            } catch {
-                logger.warn(component: "MLScoringEngine", event: "Failed to score coin with ML, continuing", data: [
-                    "symbol": symbol,
-                    "error": error.localizedDescription
-                ])
+            for symbol in supportedSymbols {
+                group.addTask { [symbol] in
+                    do {
+                        return try await self.scoreCoin(symbol: symbol)
+                    } catch {
+                        self.logger.warn(component: "MLScoringEngine", event: "Failed to score coin with ML, continuing", data: [
+                            "symbol": symbol,
+                            "error": error.localizedDescription
+                        ])
+                        return nil
+                    }
+                }
             }
+
+            for try await result in group {
+                if let score = result {
+                    results.append(score)
+                }
+            }
+
+            return results
         }
 
         coinScores.sort { $0.totalScore > $1.totalScore }

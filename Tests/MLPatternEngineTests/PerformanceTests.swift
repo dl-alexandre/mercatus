@@ -3,6 +3,8 @@ import Foundation
 @testable import MLPatternEngine
 @testable import MLPatternEngineAPI
 @testable import Utils
+@testable import SmartVestor
+@testable import Core
 
 @Suite("Performance Tests")
 struct PerformanceTests {
@@ -278,6 +280,101 @@ struct PerformanceTests {
 
     }
 
+    @Test func testTechnicalIndicatorsPerformance() async throws {
+        let technicalIndicators = TechnicalIndicators()
+
+        let prices = Array(0..<10000).map { Double($0) + 50000.0 + Double.random(in: 0..<1000) }
+
+        let startTime = Date()
+
+        let rsi = technicalIndicators.calculateRSI(prices: prices, period: 14)
+        let macd = technicalIndicators.calculateMACD(prices: prices, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9)
+        let bollinger = technicalIndicators.calculateBollingerBands(prices: prices, period: 20)
+        let ema = technicalIndicators.calculateEMA(prices: prices, period: 12)
+        let stochastic = technicalIndicators.calculateStochastic(
+            high: prices.map { $0 + 100 },
+            low: prices.map { $0 - 100 },
+            close: prices,
+            kPeriod: 14
+        )
+
+        let elapsed = Date().timeIntervalSince(startTime)
+
+        #expect(elapsed < 1.0)
+        #expect(rsi.count > 0)
+        #expect(macd.macd.count > 0)
+        #expect(bollinger.upper.count > 0)
+        #expect(ema.count > 0)
+        #expect(stochastic.k.count > 0)
+
+        print("Technical Indicators Performance: \(String(format: "%.3f", elapsed))s for 10K data points")
+    }
+
+    @Test func testConcurrentCoinScoring() async throws {
+        let symbols = ["BTC", "ETH", "BNB", "ADA", "SOL"]
+
+        let concurrentStartTime = Date()
+        await withTaskGroup(of: Void.self) { group in
+            for _ in symbols {
+                group.addTask {
+                    let technicalIndicators = TechnicalIndicators()
+                    let prices = Array(0..<1000).map { _ in Double.random(in: 30000...50000) }
+                    _ = technicalIndicators.calculateRSI(prices: prices)
+                    _ = technicalIndicators.calculateMACD(prices: prices)
+                    _ = technicalIndicators.calculateBollingerBands(prices: prices)
+                }
+            }
+        }
+        let concurrentTime = Date().timeIntervalSince(concurrentStartTime)
+
+        let sequentialStartTime = Date()
+        for _ in symbols {
+            let technicalIndicators = TechnicalIndicators()
+            let prices = Array(0..<1000).map { _ in Double.random(in: 30000...50000) }
+            _ = technicalIndicators.calculateRSI(prices: prices)
+            _ = technicalIndicators.calculateMACD(prices: prices)
+            _ = technicalIndicators.calculateBollingerBands(prices: prices)
+        }
+        let sequentialTime = Date().timeIntervalSince(sequentialStartTime)
+
+        #expect(concurrentTime < 2.0)
+        #expect(sequentialTime < 3.0)
+
+        let speedup = sequentialTime / concurrentTime
+        print("Concurrent vs Sequential: \(String(format: "%.2fx", speedup)) speedup")
+        print("Concurrent: \(String(format: "%.3f", concurrentTime))s")
+        print("Sequential: \(String(format: "%.3f", sequentialTime))s")
+    }
+
+    @Test func testMemoryEfficientProcessing() async throws {
+        let technicalIndicators = TechnicalIndicators()
+
+        let sizes = [1000, 5000, 10000, 50000]
+        var results: [(size: Int, time: TimeInterval, memory: Int64)] = []
+
+        for size in sizes {
+            let prices = Array(0..<size).map { Double($0) + 50000.0 }
+
+            let memoryBefore = getCurrentMemoryUsage()
+            let startTime = Date()
+
+            _ = technicalIndicators.calculateRSI(prices: prices, period: 14)
+            _ = technicalIndicators.calculateMACD(prices: prices)
+            _ = technicalIndicators.calculateBollingerBands(prices: prices)
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            let memoryAfter = getCurrentMemoryUsage()
+            let memoryDelta = memoryAfter - memoryBefore
+
+            results.append((size, elapsed, memoryDelta))
+
+            print("Size: \(size), Time: \(String(format: "%.3f", elapsed))s, Memory: \(String(format: "%.2f", Double(memoryDelta) / 1024.0 / 1024.0))MB")
+        }
+
+        #expect(results.allSatisfy { $0.time < 10.0 })
+        #expect(results.allSatisfy { Double($0.memory) / 1024.0 / 1024.0 < 100.0 })
+    }
+
     private func getCurrentMemoryUsage() -> Int64 {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
@@ -297,4 +394,8 @@ struct PerformanceTests {
             return 0
         }
     }
+}
+
+private func createTestLogger() -> StructuredLogger {
+    return StructuredLogger()
 }
