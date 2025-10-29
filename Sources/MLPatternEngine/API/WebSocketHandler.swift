@@ -72,7 +72,7 @@ public class WebSocketHandler: @unchecked Sendable {
                     break
                 }
             }
-        } catch {
+        } catch let error {
             logger.error(component: "WebSocketHandler", event: "WebSocket error: \(error)", data: ["connectionId": connectionId])
         }
     }

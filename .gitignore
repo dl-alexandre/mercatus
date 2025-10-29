@@ -19,3 +19,12 @@ scripts/
 docker/
 docs/
 .vscode/
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+# Data directory
+data/

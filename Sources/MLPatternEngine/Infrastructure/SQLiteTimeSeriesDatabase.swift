@@ -653,7 +653,7 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
     }
 
     public func executeQuery(_ query: String, parameters: [any Sendable]) async throws -> [[String: any Sendable]] {
-        guard let db else {
+        guard db != nil else {
             throw SQLiteDatabaseError.unexpected("Database connection not initialized")
         }
 

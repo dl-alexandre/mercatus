@@ -315,9 +315,9 @@ public class OperationalDashboard: OperationalDashboardProtocol {
     }
 
     public func getAlertStatus() async throws -> AlertStatus {
-        let activeAlerts = await alertingSystem.getActiveAlerts()
-        let alertHistory = await alertingSystem.getAlertHistory(limit: 100)
-        let alertRules = await alertingSystem.getAlertRules()
+        let activeAlerts = alertingSystem.getActiveAlerts()
+        let alertHistory = alertingSystem.getAlertHistory(limit: 100)
+        let alertRules = alertingSystem.getAlertRules()
 
         return AlertStatus(
             activeAlerts: activeAlerts,
@@ -487,33 +487,22 @@ public class OperationalDashboard: OperationalDashboardProtocol {
     private func checkCacheHealth() async throws -> ServiceHealth {
         let startTime = Date()
 
-        do {
-            let stats = cacheManager.getCacheStats()
-            let latency = Date().timeIntervalSince(startTime)
+        let stats = cacheManager.getCacheStats()
+        let latency = Date().timeIntervalSince(startTime)
 
-            let status: HealthStatus = stats.hitRate > 0.8 ? .healthy : .degraded
+        let status: HealthStatus = stats.hitRate > 0.8 ? .healthy : .degraded
 
-            return ServiceHealth(
-                name: "Cache",
-                status: status,
-                latency: latency,
-                errorRate: 0.0,
-                lastCheck: Date(),
-                details: [
-                    "hit_rate": String(stats.hitRate),
-                    "total_keys": String(stats.totalKeys)
-                ]
-            )
-        } catch {
-            return ServiceHealth(
-                name: "Cache",
-                status: .unhealthy,
-                latency: Date().timeIntervalSince(startTime),
-                errorRate: 1.0,
-                lastCheck: Date(),
-                details: ["error": error.localizedDescription]
-            )
-        }
+        return ServiceHealth(
+            name: "Cache",
+            status: status,
+            latency: latency,
+            errorRate: 0.0,
+            lastCheck: Date(),
+            details: [
+                "hit_rate": String(stats.hitRate),
+                "total_keys": String(stats.totalKeys)
+            ]
+        )
     }
 
     private func checkDatabaseHealth() async throws -> ServiceHealth {

@@ -109,30 +109,25 @@ public class MLPatternEngineFactory {
     }
 
     private func seedHistoricalDataFromProviders(into database: DatabaseProtocol) async throws {
-        let symbols = ["BTC", "ETH", "ADA", "DOT", "LINK", "UNI", "SOL", "AVAX", "MATIC", "DOGE",
-                       "SHIB", "FIL", "AR", "SC", "ATOM", "NEAR", "FTM", "ALGO"]
+    let symbols = ["AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
+    "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
+                       "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
+                       "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
+                       "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
+                       "VIRTUAL", "ZORA"]
         let endDate = Date()
-        guard let startDate = Calendar.current.date(byAdding: .day, value: -90, to: endDate) else {
-            logger.error(component: "MLPatternEngineFactory", event: "Failed to calculate start date")
-            return
-        }
-
-        let totalCount = try await checkTotalDataExists(database: database)
-
-        if totalCount >= 1000 {
-            logger.debug(component: "MLPatternEngineFactory", event: "Sufficient cached data exists, skipping detailed checks", data: [
-                "total_count": String(totalCount)
-            ])
-            return
+        guard let startDate = Calendar.current.date(byAdding: .day, value: -180, to: endDate) else {
+        logger.error(component: "MLPatternEngineFactory", event: "Failed to calculate start date")
+        return
         }
 
         var symbolsNeedingData: [String] = []
 
         for symbol in symbols {
-            let count = try await checkDataExists(database: database, symbol: symbol, from: startDate, to: endDate)
-            if count < 50 {
-                symbolsNeedingData.append(symbol)
-            }
+        let count = try await checkDataExists(database: database, symbol: symbol, from: startDate, to: endDate)
+        if count < 50 {
+            symbolsNeedingData.append(symbol)
+        }
         }
 
         guard !symbolsNeedingData.isEmpty else {

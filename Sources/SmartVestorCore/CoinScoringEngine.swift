@@ -333,12 +333,14 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
     }
 
     private func getAllSupportedSymbols() -> [String] {
+        // Robinhood-supported cryptocurrencies (official list)
         return [
-            "BTC", "ETH", "ADA", "DOT", "LINK", "UNI", "AAVE", "COMP", "MKR", "SNX",
-            "SOL", "AVAX", "MATIC", "ARB", "OP", "ATOM", "NEAR", "FTM", "ALGO", "ICP",
-            "DOGE", "SHIB", "PEPE", "FLOKI", "BONK", "WIF", "BOME", "POPCAT", "MEW", "MYRO",
-            "AXS", "SAND", "MANA", "GALA", "ENJ", "LOOKS", "RARE", "APE", "GRT", "BAND",
-            "API3", "XMR", "ZEC", "DASH", "FET", "AGIX", "OCEAN", "FIL", "AR", "SC"
+            "AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
+            "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
+            "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
+            "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
+            "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
+            "VIRTUAL", "ZORA"
         ]
     }
 
@@ -916,22 +918,24 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
     // MARK: - Helper Methods
 
     private func getCategoryForSymbol(_ symbol: String) -> CoinCategory {
-        let categoryMap: [String: CoinCategory] = [
+    let categoryMap: [String: CoinCategory] = [
             "BTC": .layer1, "ETH": .layer1, "SOL": .layer1, "AVAX": .layer1,
-            "ATOM": .layer1, "NEAR": .layer1, "FTM": .layer1, "ALGO": .layer1,
-            "ICP": .layer1, "MATIC": .layer2, "ARB": .layer2, "OP": .layer2,
-            "UNI": .defi, "AAVE": .defi, "COMP": .defi, "MKR": .defi, "SNX": .defi,
-            "LINK": .infrastructure, "GRT": .infrastructure, "BAND": .infrastructure,
-            "API3": .infrastructure, "AXS": .gaming, "SAND": .gaming, "MANA": .gaming,
-            "GALA": .gaming, "ENJ": .gaming, "LOOKS": .nft, "RARE": .nft, "APE": .nft,
-            "XMR": .privacy, "ZEC": .privacy, "DASH": .privacy,
-            "DOGE": .meme, "SHIB": .meme, "PEPE": .meme, "FLOKI": .meme,
-            "BONK": .meme, "WIF": .meme, "BOME": .meme, "POPCAT": .meme,
-            "MEW": .meme, "MYRO": .meme, "FET": .ai, "AGIX": .ai, "OCEAN": .ai,
-            "FIL": .storage, "AR": .storage, "SC": .storage
+            "ADA": .layer1, "BCH": .layer1, "ETC": .layer1, "LTC": .layer1,
+            "XRP": .layer1, "XLM": .layer1, "HBAR": .layer1, "SUI": .layer1,
+            "TON": .layer1, "XTZ": .layer1, "BNB": .layer1, "DOGE": .meme,
+            "ARB": .layer2, "OP": .layer2,
+            "UNI": .defi, "AAVE": .defi, "COMP": .defi, "CRV": .defi,
+            "LINK": .infrastructure, "ONDO": .infrastructure, "BAND": .infrastructure,
+            "VIRTUAL": .gaming, "FLOKI": .gaming, "ZORA": .nft, "APE": .nft,
+            "SHIB": .meme, "PEPE": .meme, "BONK": .meme, "WIF": .meme,
+            "MEW": .meme, "MOODENG": .meme, "PENGU": .meme, "PNUT": .meme,
+            "POPCAT": .meme, "TRUMP": .meme, "HYPE": .meme, "WLFI": .meme,
+            "XPL": .meme, "ASTER": .meme,
+        "FET": .ai, "AGIX": .ai, "OCEAN": .ai,
+    "USDC": .infrastructure
         ]
 
-        return categoryMap[symbol] ?? .layer1
+        return categoryMap[symbol] ?? .meme // Default to meme for new coins
     }
 
     private func getCoinsForCategory(_ category: CoinCategory) -> [String] {

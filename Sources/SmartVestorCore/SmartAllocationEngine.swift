@@ -1,25 +1,28 @@
 import Foundation
 import Utils
 
-public class SmartAllocationEngine: AdvancedAllocationManagerProtocol {
+class SmartAllocationEngine: AdvancedAllocationManagerProtocol {
     private let config: SmartVestorConfig
     private let persistence: PersistenceProtocol
     private let crossExchangeAnalyzer: CrossExchangeAnalyzerProtocol
     private let logger: StructuredLogger
     private let marketDataProvider: MarketDataProviderProtocol
+    private let mlScoringEngine: MLScoringEngineProtocol?
 
     public init(
         config: SmartVestorConfig,
         persistence: PersistenceProtocol,
         crossExchangeAnalyzer: CrossExchangeAnalyzerProtocol,
         logger: StructuredLogger,
-        marketDataProvider: MarketDataProviderProtocol
+        marketDataProvider: MarketDataProviderProtocol,
+        mlScoringEngine: MLScoringEngineProtocol? = nil
     ) {
         self.config = config
         self.persistence = persistence
         self.crossExchangeAnalyzer = crossExchangeAnalyzer
         self.logger = logger
         self.marketDataProvider = marketDataProvider
+        self.mlScoringEngine = mlScoringEngine
     }
 
     public func createDynamicAllocationPlan(amount: Double, timeHorizon: TimeHorizon) async throws -> DynamicAllocationPlan {
@@ -173,6 +176,11 @@ public class SmartAllocationEngine: AdvancedAllocationManagerProtocol {
 
     public func scoreCoins() async throws -> [CoinScore] {
         logger.info(component: "SmartAllocationEngine", event: "Scoring coins")
+
+        if let mlScoringEngine = mlScoringEngine {
+            logger.info(component: "SmartAllocationEngine", event: "Using ML-based scoring")
+            return try await mlScoringEngine.scoreAllCoins()
+        }
 
         let symbols = getAllSupportedSymbols()
         var coinScores: [CoinScore] = []

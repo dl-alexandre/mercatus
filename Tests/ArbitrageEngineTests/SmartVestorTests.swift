@@ -1,7 +1,10 @@
 import Testing
 import Foundation
 @testable import SmartVestor
+import Utils
+import MLPatternEngine
 
+@Suite(.serialized)
 struct SmartVestorTests {
 
     @Test("Configuration Management")
@@ -349,5 +352,47 @@ struct SmartVestorTests {
         // Explicitly close the connection before cleanup
         persistence.close()
         try FileManager.default.removeItem(atPath: dbPath)
+    }
+
+    @Test("Robinhood Integration - Single Coin Real ML Engine")
+    func testRobinhoodSingleCoinRealMLEngine() async throws {
+        let logger = StructuredLogger()
+        let factory = MLPatternEngineFactory(logger: logger)
+        let mlEngine = try await factory.createMLPatternEngine()
+        let mlScoringEngine = MLScoringEngine(mlEngine: mlEngine, logger: logger)
+
+        let testSymbol = "BTC"
+        let coinScore = try await mlScoringEngine.scoreCoin(symbol: testSymbol)
+
+        #expect(coinScore.symbol == testSymbol)
+        #expect(coinScore.totalScore >= 0.0)
+        #expect(coinScore.technicalScore >= 0.0)
+        #expect(coinScore.fundamentalScore >= 0.0)
+        #expect(coinScore.momentumScore >= 0.0)
+        #expect(coinScore.volatilityScore >= 0.0)
+        #expect(coinScore.liquidityScore >= 0.0)
+
+        #expect(coinScore.marketCap >= 0)
+        #expect(coinScore.volume24h >= 0)
+        #expect(coinScore.priceChange24h.isFinite)
+        #expect(coinScore.priceChange7d.isFinite)
+        #expect(coinScore.priceChange30d.isFinite)
+
+        try? await mlEngine.stop()
+    }
+
+    @Test("Robinhood Integration - Filter 42 Coins")
+    func testRobinhoodIntegrationFilter42Coins() async throws {
+        let logger = createTestLogger()
+        let factory = MLPatternEngineFactory(
+            logger: logger,
+            useMLXModels: false
+        )
+        let mlEngine = try await factory.createMLPatternEngine()
+        let mlScoringEngine = MLScoringEngine(mlEngine: mlEngine, logger: logger)
+
+        let allCoinScores = try await mlScoringEngine.scoreAllCoins()
+
+        #expect(allCoinScores.count > 0)
     }
 }

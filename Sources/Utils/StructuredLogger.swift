@@ -31,6 +31,7 @@ public final class StructuredLogger {
     private let rateInterval: TimeInterval = 60
     private var droppedLogCount: Int = 0
     private var lastDropWarningTime: TimeInterval = 0
+    private let lock = NSLock()
     private let dropWarningInterval: TimeInterval = 60
 
     public init(maxLogsPerMinute: Int = 1000, clock: @escaping @Sendable () -> Date = Date.init, enabled: Bool = true) {
@@ -169,6 +170,8 @@ public final class StructuredLogger {
     }
 
     private func consumeToken(for date: Date) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
         let cutoff = date.timeIntervalSince1970 - rateInterval
         logTimestamps.removeAll { $0 < cutoff }
         guard logTimestamps.count < maxLogsPerMinute else { return false }
@@ -177,6 +180,8 @@ public final class StructuredLogger {
     }
 
     private func recordDroppedLog(at date: Date) {
+        lock.lock()
+        defer { lock.unlock() }
         droppedLogCount += 1
         let now = date.timeIntervalSince1970
 
@@ -212,7 +217,7 @@ public final class StructuredLogger {
     private func writeToStdout(_ data: Data) {
         data.withUnsafeBytes { buffer in
             guard let baseAddress = buffer.baseAddress else { return }
-            _ = write(STDOUT_FILENO, baseAddress, buffer.count)
+            _ = write(STDERR_FILENO, baseAddress, buffer.count)
         }
     }
 

@@ -65,6 +65,12 @@ swift run SmartVestorCLI coins --detailed --limit 5
 # Filter to Robinhood-supported cryptocurrencies only
 swift run SmartVestorCLI coins --robinhood --detailed --limit 10
 
+# Check account balances including Robinhood
+swift run SmartVestorCLI balance
+
+# Check only Robinhood balance
+swift run SmartVestorCLI balance --robinhood
+
 # Use rule-based scoring instead (statistical analysis fallback)
 swift run SmartVestorCLI coins --useRuleBased --detailed --limit 5
 
@@ -103,39 +109,49 @@ When using `--detailed`, you get comprehensive analysis including:
 - **Liquidity Score**: Trading volume and market depth
 - **Price Changes**: 24h, 7d, and 30d performance metrics
 
-#### Example Output
+#### JSON Output (Default)
+```json
+{
+  "coins": [
+    {
+      "symbol": "MEW",
+      "totalScore": 0.8498909449117755,
+      "technicalScore": 0.5,
+      "fundamentalScore": 0.6,
+      "momentumScore": 0.9685862659249849,
+      "volatilityScore": 0.9981881284726053,
+      "liquidityScore": 0.7,
+      "category": "infrastructure",
+      "riskLevel": "low",
+      "marketCap": 1870607.6058864307,
+      "volume24h": 32907799.110389628,
+      "priceChange24h": -0.03402926228451453,
+      "priceChange7d": 0.003247262758739976,
+      "priceChange30d": -0.2909800115848102,
+      "lastUpdated": 783406101.190414,
+      "id": "28C56323-9F51-4D0E-B43C-1A01F2125DC0"
+    }
+  ],
+  "method": "ml_based",
+  "limit": 1,
+  "robinhood_only": false
+}
 ```
-🎯 SmartVestor Coin Recommendations
-==================================
 
-🤖 Using ML-powered scoring (machine learning)
-🔍 Analyzing cryptocurrencies...
-✅ Analysis complete! Showing top 5 coins:
+#### Detailed Text Output (`--detailed` flag)
+```
+Detailed Coin Scores (Top 1):
+Method: ml_based
 
-1. SHIB - Score: 0.649
-   Category: meme | Risk: low
-   Market Cap: $5.99T | Volume: $55.0M
-
-2. ADA - Score: 0.608
-   Category: layer1 | Risk: medium
-   Market Cap: $29.5B | Volume: $601.1M
-
-3. DOGE - Score: 0.591
-   Category: meme | Risk: low
-   Market Cap: $28.5B | Volume: $775.1M
-
-4. MATIC - Score: 0.539
-   Category: infrastructure | Risk: low
-   Market Cap: $2.0B | Volume: $0.00
-
-5. BTC - Score: 0.500
-   Category: layer1 | Risk: high
-   Market Cap: $2.35T | Volume: $23.4B
-
-💡 Use --detailed flag to see scoring breakdown
-🤖 These recommendations are powered by ML models
-   including price prediction, volatility forecasting,
-   pattern recognition, and sentiment analysis.
+Symbol: MEW
+  Total Score: 0.850
+  Technical: 0.50
+  Fundamental: 0.60
+  Momentum: 0.97
+  Volatility: 1.00
+  Liquidity: 0.70
+  Market Cap: 1.9M
+  Category: infrastructure
 ```
 
 ### 🏦 Robinhood Integration (`--robinhood` flag)
@@ -398,6 +414,67 @@ export ML_ENGINE_POSTGRES_URL=postgresql://user:pass@localhost:5432/mlengine
 export ML_ENGINE_JWT_SECRET=your-secret-key
 export ML_ENGINE_API_PORT=8080
 ```
+
+### Robinhood Integration
+The platform includes Robinhood API integration for checking account balances and placing trades.
+
+#### Setup Credentials via .env File
+Create a `.env` file in the project root with your Robinhood credentials:
+
+```bash
+# .env file
+ROBINHOOD_API_KEY=rh-api-your-key-here
+ROBINHOOD_PRIVATE_KEY=your-base64-encoded-private-key-here
+```
+
+The system will automatically load these environment variables from the `.env` file.
+
+**Note:** With just the API key, you can check balances but cannot place orders (full authentication with private key signature required for trading).
+
+#### Alternative: Using Environment Variables Directly
+You can also set environment variables directly:
+```bash
+export ROBINHOOD_API_KEY=rh-api-your-key-here
+export ROBINHOOD_PRIVATE_KEY=your-base64-encoded-private-key-here
+```
+
+#### Generate Ed25519 Key Pair
+To create API credentials, you need to generate an Ed25519 key pair:
+```python
+import nacl.signing
+import base64
+
+# Generate key pair
+private_key = nacl.signing.SigningKey.generate()
+public_key = private_key.verify_key
+
+# Convert to base64
+private_key_base64 = base64.b64encode(private_key.encode()).decode()
+public_key_base64 = base64.b64encode(public_key.encode()).decode()
+
+print("Private Key (Base64):", private_key_base64)
+print("Public Key (Base64):", public_key_base64)
+```
+
+Upload the public key to Robinhood API Credentials Portal and use the private key for signing requests.
+
+#### Check Robinhood Balance
+```bash
+# Check all balances including Robinhood
+swift run SmartVestorCLI balance
+
+# Check only Robinhood balance
+swift run SmartVestorCLI balance --robinhood
+
+# Detailed balance breakdown
+swift run SmartVestorCLI balance --detailed
+```
+
+#### Features
+- **Balance Checking**: Fetch crypto holdings from Robinhood account
+- **Ed25519 Authentication**: Secure key-pair based authentication
+- **Rate Limiting**: Built-in rate limiting (100 req/min, 300 burst)
+- **Account Integration**: Automatically syncs with SmartVestor holdings
 
 ## 🎯 What This Platform Demonstrates
 

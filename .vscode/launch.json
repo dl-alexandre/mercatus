@@ -1,7 +1,7 @@
 {
     "configurations": [
         {
-            "type": "swift",
+            "type": "lldb",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -10,7 +10,7 @@
             "preLaunchTask": "swift: Build Debug ArbitrageEngine"
         },
         {
-            "type": "swift",
+            "type": "lldb",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -37,7 +37,7 @@
             "preLaunchTask": "swift: Build Release SmartVestor"
         },
         {
-            "type": "swift",
+            "type": "lldb",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -46,7 +46,7 @@
             "preLaunchTask": "swift: Build Debug SmartVestorCLI"
         },
         {
-            "type": "swift",
+            "type": "lldb",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",

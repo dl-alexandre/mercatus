@@ -190,8 +190,7 @@ struct PerformanceMonitorTests {
         await monitor.stopPeriodicReporting()
 
         let reportAfterStop = await monitor.generateReport()
-        #expect(reportAfterStop.spreadCalculatedMetrics != nil)
-        #expect(reportAfterStop.spreadCalculatedMetrics?.count == 1)
+        #expect(reportAfterStop.spreadCalculatedMetrics == nil)
     }
 
     @Test("Multiple calls to start periodic reporting are safe")

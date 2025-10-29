@@ -118,7 +118,7 @@ public class MockCacheManager: CacheManagerProtocol {
     }
 
     public func get<T: Codable>(key: String, type: T.Type) async throws -> T? {
-        return try await cacheQueue.sync {
+        return try cacheQueue.sync {
             guard let cached = cache[key],
                   cached.expiry > Date() else {
                 return nil
@@ -129,16 +129,17 @@ public class MockCacheManager: CacheManagerProtocol {
     }
 
     public func set<T: Codable>(key: String, value: T, ttl: TimeInterval) async throws {
+        logger.info(component: "MockCacheManager", event: "Setting cache value for key: \(key), value: \(value), type: \(type(of: value))")
         let data = try JSONEncoder().encode(value)
         let expiry = Date().addingTimeInterval(ttl)
 
-        await cacheQueue.sync {
+        cacheQueue.sync {
             cache[key] = (data, expiry)
         }
     }
 
     public func invalidate(key: String) async throws {
-        await cacheQueue.sync {
+        _ = cacheQueue.sync {
             cache.removeValue(forKey: key)
         }
     }
@@ -146,14 +147,14 @@ public class MockCacheManager: CacheManagerProtocol {
     public func invalidatePattern(pattern: String) async throws {
         let regex = try NSRegularExpression(pattern: pattern)
 
-        let keysToRemove = await cacheQueue.sync {
+        let keysToRemove = cacheQueue.sync {
             cache.keys.filter { key in
                 let range = NSRange(location: 0, length: key.utf16.count)
                 return regex.firstMatch(in: key, options: [], range: range) != nil
             }
         }
 
-        await cacheQueue.sync {
+        cacheQueue.sync {
             for key in keysToRemove {
                 cache.removeValue(forKey: key)
             }

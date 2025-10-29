@@ -54,7 +54,8 @@ let package = Package(
             name: "Connectors",
             dependencies: [
                 "Utils",
-                "Core"
+                "Core",
+                "SmartVestor"
             ],
             path: "Sources/Connectors"
         ),
@@ -80,6 +81,8 @@ let package = Package(
             dependencies: [
                 "SmartVestor",
                 "MLPatternEngine",
+                "MLPatternEngineSummarization",
+                "Connectors",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             path: "Sources/SmartVestor",

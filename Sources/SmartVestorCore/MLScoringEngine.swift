@@ -18,6 +18,7 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
     private let supportedSymbols: [String]
     private let cacheTTL: TimeInterval = 300
     private var cache: [String: (score: CoinScore, timestamp: Date)] = [:]
+    private let cacheQueue = DispatchQueue(label: "MLScoringEngine.cache", attributes: .concurrent)
     private let cacheURL: URL
 
     public init(
@@ -26,12 +27,14 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
     ) {
         self.mlEngine = mlEngine
         self.logger = logger
+        // Robinhood-supported cryptocurrencies (official list)
         self.supportedSymbols = [
-            "BTC", "ETH", "ADA", "DOT", "LINK", "UNI", "AAVE", "COMP", "MKR", "SNX",
-            "SOL", "AVAX", "MATIC", "ARB", "OP", "ATOM", "NEAR", "FTM", "ALGO", "ICP",
-            "DOGE", "SHIB", "PEPE", "FLOKI", "BONK", "WIF", "BOME", "POPCAT", "MEW", "MYRO",
-            "AXS", "SAND", "MANA", "GALA", "ENJ", "LOOKS", "RARE", "APE", "GRT", "BAND",
-            "API3", "XMR", "ZEC", "DASH", "FET", "AGIX", "OCEAN", "FIL", "AR", "SC"
+            "AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
+            "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
+            "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
+            "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
+            "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
+            "VIRTUAL", "ZORA"
         ]
 
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -47,18 +50,21 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
         }
 
         let now = Date()
-        for (symbol, cachedScore) in cached {
-            let age = now.timeIntervalSince1970 - cachedScore.timestamp
-            if age < cacheTTL {
-                cache[symbol] = (cachedScore.coinScore, Date(timeIntervalSince1970: cachedScore.timestamp))
+        cacheQueue.sync(flags: .barrier) {
+            for (symbol, cachedScore) in cached {
+                let age = now.timeIntervalSince1970 - cachedScore.timestamp
+                if age < cacheTTL {
+                    self.cache[symbol] = (cachedScore.coinScore, Date(timeIntervalSince1970: cachedScore.timestamp))
+                }
             }
         }
 
-        logger.debug(component: "MLScoringEngine", event: "Loaded cache", data: ["count": String(cache.count)])
+        let count = cache.count
+        logger.debug(component: "MLScoringEngine", event: "Loaded cache", data: ["count": String(count)])
     }
 
     private func saveCache() {
-        let toSave = cache.mapValues { CachedScore(coinScore: $0.score, timestamp: $0.timestamp.timeIntervalSince1970) }
+        let toSave = cacheQueue.sync { cache.mapValues { CachedScore(coinScore: $0.score, timestamp: $0.timestamp.timeIntervalSince1970) } }
 
         guard let data = try? JSONEncoder().encode(toSave) else { return }
 
@@ -76,13 +82,14 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
 
         var coinScores = try await withThrowingTaskGroup(of: CoinScore?.self) { group in
             var results: [CoinScore] = []
+            var failedSymbols: [String] = []
 
             for symbol in supportedSymbols {
                 group.addTask { [symbol] in
                     do {
                         return try await self.scoreCoin(symbol: symbol)
                     } catch {
-                        self.logger.warn(component: "MLScoringEngine", event: "Failed to score coin with ML, continuing", data: [
+                        self.logger.debug(component: "MLScoringEngine", event: "Skipping coin with insufficient data", data: [
                             "symbol": symbol,
                             "error": error.localizedDescription
                         ])
@@ -94,7 +101,16 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
             for try await result in group {
                 if let score = result {
                     results.append(score)
+                } else {
+                    failedSymbols.append("unknown")
                 }
+            }
+
+            if !failedSymbols.isEmpty {
+                self.logger.info(component: "MLScoringEngine", event: "Some coins skipped due to insufficient data", data: [
+                    "skipped_count": String(failedSymbols.count),
+                    "successful_count": String(results.count)
+                ])
             }
 
             return results
@@ -115,7 +131,7 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
     }
 
     public func scoreCoin(symbol: String) async throws -> CoinScore {
-        if let cached = cache[symbol], Date().timeIntervalSince(cached.timestamp) < cacheTTL {
+        if let cached = cacheQueue.sync(execute: { cache[symbol] }), Date().timeIntervalSince(cached.timestamp) < cacheTTL {
             logger.debug(component: "MLScoringEngine", event: "Using cached result", data: ["symbol": symbol])
             return cached.score
         }
@@ -146,12 +162,19 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
 
         let (marketCap, volume24h, priceChange24h, priceChange7d, priceChange30d) = extractRealMarketData(historicalDataPoints: historicalDataPoints, baseSymbol: symbol)
 
-        let mlScore = calculateMLScore(
-            priceConfidence: pricePrediction.confidence,
-            volatility: volatilityPrediction.prediction,
-            patterns: patterns,
-            features: features
-        )
+        // Calculate components for weighted composite index
+        let priceConfidence = pricePrediction.confidence
+        let volatilityScore = calculateVolatilityScore(volatility: volatilityPrediction.prediction)
+        let technicalScore = calculateTechnicalScore(patterns: patterns, features: features)
+        let fundamentalScore = calculateFundamentalScore(symbol: symbol)
+        let liquidityScore = 0.7
+
+        // Improved weighted composite formula
+        let totalScore = (0.40 * priceConfidence) +
+                        (0.30 * volatilityScore) +
+                        (0.20 * technicalScore) +
+                        (0.07 * fundamentalScore) +
+                        (0.03 * liquidityScore)
 
         let riskLevel = determineRiskLevel(
             volatility: volatilityPrediction.prediction,
@@ -163,12 +186,12 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
 
         let coinScore = CoinScore(
             symbol: symbol,
-            totalScore: mlScore,
-            technicalScore: calculateTechnicalScore(patterns: patterns, features: features),
-            fundamentalScore: calculateFundamentalScore(symbol: symbol),
-            momentumScore: pricePrediction.prediction > 0 ? 0.5 : 0.0,
-            volatilityScore: volatilityPrediction.prediction,
-            liquidityScore: 0.7,
+            totalScore: totalScore,
+            technicalScore: technicalScore,
+            fundamentalScore: fundamentalScore,
+            momentumScore: priceConfidence, // Repurpose momentumScore for price prediction confidence
+            volatilityScore: volatilityScore,
+            liquidityScore: liquidityScore,
             category: category,
             riskLevel: riskLevel,
             marketCap: marketCap,
@@ -179,88 +202,111 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
         )
 
         logger.info(component: "MLScoringEngine", event: "Coin scored with ML", data: [
-            "symbol": symbol,
-            "ml_score": String(mlScore),
-            "confidence": String(pricePrediction.confidence)
+        "symbol": symbol,
+        "total_score": String(totalScore),
+        "confidence": String(pricePrediction.confidence)
         ])
 
-        cache[symbol] = (coinScore, Date())
+        cacheQueue.sync(flags: .barrier) {
+            self.cache[symbol] = (coinScore, Date())
+        }
 
         return coinScore
     }
 
-    private func calculateMLScore(
-        priceConfidence: Double,
-        volatility: Double,
-        patterns: [DetectedPattern],
-        features: FeatureSet
-    ) -> Double {
-        var score = priceConfidence * 0.4
 
-        let inverseVolatility = 1.0 - min(1.0, volatility)
-        score += inverseVolatility * 0.3
 
-        for pattern in patterns {
-            let patternName = pattern.patternType.rawValue
-            if patternName.contains("bull") || patternName.contains("ascending") {
-                score += 0.05
-            } else if patternName.contains("bear") || patternName.contains("descending") {
-                score -= 0.05
+    private func calculateTechnicalScore(patterns: [DetectedPattern], features: FeatureSet) -> Double {
+    var score = 0.6
+
+    // Pattern recognition
+    var bullishCount = 0
+    var bearishCount = 0
+
+    for pattern in patterns {
+    let patternName = pattern.patternType.rawValue
+    if patternName.contains("bull") || patternName.contains("ascending") || patternName.contains("cup") {
+        bullishCount += 1
+    } else if patternName.contains("bear") || patternName.contains("descending") || patternName.contains("head") {
+        bearishCount += 1
             }
-        }
+    }
 
+    score += Double(bullishCount) * 0.1
+        score -= Double(bearishCount) * 0.1
+
+        // RSI indicator
         if let rsi = features.features["rsi"] {
             if rsi < 30 {
-                score += 0.05
+                score += 0.2 // Oversold, bullish
             } else if rsi > 70 {
-                score -= 0.05
+                score -= 0.2 // Overbought, bearish
             }
         }
 
+        // MACD indicator
         if let macd = features.features["macd"] {
             if macd > 0 {
-                score += 0.05
+                score += 0.1 // Bullish signal
             } else {
-                score -= 0.05
+                score -= 0.1 // Bearish signal
             }
         }
 
         return max(0.0, min(1.0, score))
     }
 
-    private func calculateTechnicalScore(patterns: [DetectedPattern], features: FeatureSet) -> Double {
-        var score = 0.5
-
-        var bullishCount = 0
-        var bearishCount = 0
-
-        for pattern in patterns {
-            let patternName = pattern.patternType.rawValue
-            if patternName.contains("bull") || patternName.contains("ascending") || patternName.contains("cup") {
-                bullishCount += 1
-            } else if patternName.contains("bear") || patternName.contains("descending") || patternName.contains("head") {
-                bearishCount += 1
-            }
-        }
-
-        score += Double(bullishCount) * 0.1
-        score -= Double(bearishCount) * 0.1
-
-        return max(0.0, min(1.0, score))
+    private func calculateVolatilityScore(volatility: Double) -> Double {
+        // Volatility score is inversely proportional to volatility
+        // Higher volatility = lower score
+        // Assuming volatility is normalized 0-1
+        return 1.0 - min(1.0, volatility)
     }
 
     private func calculateFundamentalScore(symbol: String) -> Double {
         let majorCoins = ["BTC", "ETH", "SOL", "ADA", "DOT"]
         let highVolumeCoins = ["BTC", "ETH", "BNB", "USDT", "SOL"]
+    let blueChipCoins = ["BTC", "ETH"] // Blue-chip assets receive premium
 
-        var score = 0.5
+    let category = getCategoryForSymbol(symbol)
 
+        // Base score by category (market strength and adoption)
+        var score: Double
+        switch category {
+        case .layer1:
+            score = 0.8
+        case .layer2:
+            score = 0.75
+        case .defi:
+            score = 0.7
+        case .infrastructure:
+            score = 0.6
+        case .gaming:
+            score = 0.5
+        case .nft:
+            score = 0.4
+        case .meme:
+            score = 0.3
+        case .ai:
+            score = 0.5
+        case .storage:
+            score = 0.5
+        case .privacy:
+            score = 0.5
+        }
+
+        // Additional bonuses
         if majorCoins.contains(symbol) {
-            score += 0.3
+            score += 0.2
         }
 
         if highVolumeCoins.contains(symbol) {
-            score += 0.2
+            score += 0.15
+        }
+
+        // Blue-chip premium
+        if blueChipCoins.contains(symbol) {
+            score += 0.1
         }
 
         return max(0.0, min(1.0, score))
@@ -293,42 +339,72 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
     }
 
     private func extractRealMarketData(historicalDataPoints: Any, baseSymbol: String) -> (marketCap: Double, volume24h: Double, priceChange24h: Double, priceChange7d: Double, priceChange30d: Double) {
-        guard let array = historicalDataPoints as? [Any] else {
-            logger.debug(component: "MLScoringEngine", event: "Failed to cast to array", data: ["baseSymbol": baseSymbol])
-            return (1_000_000_000, 10_000_000, 0.0, 0.0, 0.0)
-        }
+    guard let array = historicalDataPoints as? [Any] else {
+    logger.debug(component: "MLScoringEngine", event: "Failed to cast to array", data: ["baseSymbol": baseSymbol])
+    return (1_000_000_000, 10_000_000, 0.0, 0.0, 0.0)
+    }
 
-        logger.debug(component: "MLScoringEngine", event: "Extracting market data", data: ["arrayCount": String(array.count), "baseSymbol": baseSymbol])
+    logger.debug(component: "MLScoringEngine", event: "Extracting market data", data: ["arrayCount": String(array.count), "baseSymbol": baseSymbol])
 
-        var closes: [Double] = []
-        var volumes: [Double] = []
+    var dataPoints: [(timestamp: Date, close: Double, volume: Double)] = []
 
         for item in array {
-            let mirror = Mirror(reflecting: item)
-            for child in mirror.children {
-                if child.label == "close", let val = child.value as? Double {
-                    closes.append(val)
-                }
-                if child.label == "volume", let val = child.value as? Double {
-                    volumes.append(val)
-                }
+        let mirror = Mirror(reflecting: item)
+    var timestamp: Date?
+    var close: Double?
+    var volume: Double?
+
+    for child in mirror.children {
+    if child.label == "timestamp", let val = child.value as? Date {
+    timestamp = val
+    } else if child.label == "close", let val = child.value as? Double {
+            close = val
+            } else if child.label == "volume", let val = child.value as? Double {
+                    volume = val
             }
+    }
+
+            if let ts = timestamp, let cl = close, let vol = volume {
+            dataPoints.append((ts, cl, vol))
+        }
+    }
+
+        guard !dataPoints.isEmpty else {
+        return (1_000_000_000, 10_000_000, 0.0, 0.0, 0.0)
+    }
+
+        // Sort by timestamp ascending
+    dataPoints.sort { $0.timestamp < $1.timestamp }
+
+    let now = Date()
+        let latestPoint = dataPoints.last!
+    let latestClose = latestPoint.close
+
+    // Find closest points to target times
+    let findClosestPrice = { (targetTime: TimeInterval) -> Double in
+    let targetDate = now.addingTimeInterval(-targetTime)
+        var closestPoint = dataPoints[0]
+            var minDiff = abs(closestPoint.timestamp.timeIntervalSince(targetDate))
+
+    for point in dataPoints {
+        let diff = abs(point.timestamp.timeIntervalSince(targetDate))
+        if diff < minDiff {
+            minDiff = diff
+            closestPoint = point
+            }
+            }
+            return closestPoint.close
         }
 
-        guard closes.count >= 2 else {
-            return (1_000_000_000, 10_000_000, 0.0, 0.0, 0.0)
-        }
+        let previous24h = findClosestPrice(24 * 3600) // 24 hours ago
+        let previous7d = findClosestPrice(7 * 24 * 3600) // 7 days ago
+        let previous30d = findClosestPrice(30 * 24 * 3600) // 30 days ago
 
-        let latestClose = closes.last!
-        let previous24h = closes.count > 24 ? closes[closes.count - 25] : closes[0]
-        let previous7d = closes.count > 168 ? closes[closes.count - 169] : closes[0]
-        let previous30d = closes[0]
+        let priceChange24h = previous24h != 0 ? (latestClose - previous24h) / previous24h : 0.0
+        let priceChange7d = previous7d != 0 ? (latestClose - previous7d) / previous7d : 0.0
+        let priceChange30d = previous30d != 0 ? (latestClose - previous30d) / previous30d : 0.0
 
-        let priceChange24h = (latestClose - previous24h) / previous24h
-        let priceChange7d = (latestClose - previous7d) / previous7d
-        let priceChange30d = (latestClose - previous30d) / previous30d
-
-        let avgVolume24h = volumes.isEmpty ? 10_000_000 : (volumes.reduce(0, +) / Double(volumes.count))
+        let avgVolume24h = dataPoints.map { $0.volume }.reduce(0, +) / Double(dataPoints.count)
         let circulatingSupply = getCirculatingSupply(symbol: baseSymbol)
         let estimatedMarketCap = latestClose * circulatingSupply
 
@@ -336,6 +412,8 @@ public class MLScoringEngine: MLScoringEngineProtocol, @unchecked Sendable {
             "marketCap": String(estimatedMarketCap),
             "volume24h": String(avgVolume24h),
             "priceChange24h": String(priceChange24h),
+            "priceChange7d": String(priceChange7d),
+            "priceChange30d": String(priceChange30d),
             "baseSymbol": baseSymbol
         ])
 

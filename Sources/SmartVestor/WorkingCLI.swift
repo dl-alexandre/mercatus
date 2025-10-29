@@ -63,7 +63,7 @@ struct CoinsCommand: AsyncParsableCommand {
     func run() async throws {
 
         let config = try loadConfiguration()
-        let logger = StructuredLogger()
+        let logger = StructuredLogger(enabled: false)
 
         var coinScores: [CoinScore]
 
@@ -88,21 +88,49 @@ struct CoinsCommand: AsyncParsableCommand {
 
         let topCoins = Array(filteredCoins.prefix(limit))
 
-
-        for (index, coin) in topCoins.enumerated() {
-            let score = String(format: "%.3f", coin.totalScore)
-            let technical = String(format: "%.2f", coin.technicalScore)
-            let fundamental = String(format: "%.2f", coin.fundamentalScore)
-            let momentum = String(format: "%.2f", coin.momentumScore)
-            let volatility = String(format: "%.2f", coin.volatilityScore)
-            let liquidity = String(format: "%.2f", coin.liquidityScore)
-
-
-            if detailed {
+        if detailed {
+            print("Detailed Coin Scores (Top \(limit)):")
+            print("Method: \(useRuleBased ? "rule_based" : "ml_based")")
+            if let categoryFilter = category {
+                print("Category: \(categoryFilter)")
+            }
+            if robinhood {
+                print("Filtered to Robinhood-supported coins")
+            }
+            print("")
+            for coin in topCoins {
+                print("Symbol: \(coin.symbol)")
+                print("  Total Score: \(String(format: "%.3f", coin.totalScore))")
+                print("  Technical: \(String(format: "%.2f", coin.technicalScore))")
+                print("  Fundamental: \(String(format: "%.2f", coin.fundamentalScore))")
+                print("  Momentum: \(String(format: "%.2f", coin.momentumScore))")
+                print("  Volatility: \(String(format: "%.2f", coin.volatilityScore))")
+                print("  Liquidity: \(String(format: "%.2f", coin.liquidityScore))")
+                print("  Market Cap: \(formatNumber(coin.marketCap))")
+                print("  Category: \(coin.category)")
+                print("")
             }
         }
 
         if !detailed {
+            struct CoinsOutput: Codable {
+                let coins: [CoinScore]
+                let method: String
+                let limit: Int
+                let category: String?
+                let robinhood_only: Bool
+            }
+            let output = CoinsOutput(
+                coins: topCoins,
+                method: useRuleBased ? "rule_based" : "ml_based",
+                limit: limit,
+                category: category,
+                robinhood_only: robinhood
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(output)
+            print(String(data: data, encoding: .utf8)!)
         }
 
         if useRuleBased {
@@ -134,7 +162,7 @@ struct CoinsCommand: AsyncParsableCommand {
     }
 
     private func runRuleBasedScoring(config: SmartVestorConfig) async throws -> [CoinScore] {
-        let mockPersistence = MockPersistence()
+        let persistence = SQLitePersistence(dbPath: "smartvestor.db")
 
         let marketDataProvider: MarketDataProviderProtocol
         if let marketDataConfig = config.marketDataProvider,
@@ -161,12 +189,15 @@ struct CoinsCommand: AsyncParsableCommand {
                 coinMarketCapAPIKey: marketDataConfig.coinMarketCapAPIKey
             )
         } else {
-            marketDataProvider = MockMarketDataProvider()
+            marketDataProvider = MultiProviderMarketDataProvider(
+                coinGeckoAPIKey: ProcessInfo.processInfo.environment["COINGECKO_API_KEY"],
+                coinMarketCapAPIKey: ProcessInfo.processInfo.environment["COINMARKETCAP_API_KEY"]
+            )
         }
 
         let coinScoringEngine = CoinScoringEngine(
             config: config,
-            persistence: mockPersistence,
+                persistence: persistence,
             marketDataProvider: marketDataProvider
         )
 
@@ -217,22 +248,25 @@ struct AllocateCommand: AsyncParsableCommand {
     func run() async throws {
 
         let config = try loadConfiguration()
-        let mockPersistence = MockPersistence()
-        let mockMarketDataProvider = MockMarketDataProvider()
+        let persistence = SQLitePersistence(dbPath: "smartvestor.db")
+        let marketDataProvider = MultiProviderMarketDataProvider(
+            coinGeckoAPIKey: ProcessInfo.processInfo.environment["COINGECKO_API_KEY"],
+            coinMarketCapAPIKey: ProcessInfo.processInfo.environment["COINMARKETCAP_API_KEY"]
+        )
 
         if scoreBased {
 
             let coinScoringEngine = CoinScoringEngine(
                 config: config,
-                persistence: mockPersistence,
-                marketDataProvider: mockMarketDataProvider
+                persistence: persistence,
+                marketDataProvider: marketDataProvider
             )
 
             let scoreBasedAllocationManager = ScoreBasedAllocationManager(
                 config: config,
-                persistence: mockPersistence,
+                persistence: persistence,
                 coinScoringEngine: coinScoringEngine,
-                marketDataProvider: mockMarketDataProvider
+                marketDataProvider: marketDataProvider
             )
 
             let allocationPlan = try await scoreBasedAllocationManager.createScoreBasedAllocation(
@@ -241,11 +275,10 @@ struct AllocateCommand: AsyncParsableCommand {
             )
 
 
-            for (index, allocation) in allocationPlan.allocations.enumerated() {
-                let percentage = String(format: "%.1f", allocation.percentage * 100)
-                let amount = String(format: "%.0f", allocation.amount)
-                let score = String(format: "%.3f", allocation.score)
-
+            for (_, allocation) in allocationPlan.allocations.enumerated() {
+                _ = String(format: "%.1f", allocation.percentage * 100)
+                _ = String(format: "%.0f", allocation.amount)
+                _ = String(format: "%.3f", allocation.score)
             }
 
 
@@ -253,14 +286,14 @@ struct AllocateCommand: AsyncParsableCommand {
 
             let allocationManager = AllocationManager(
                 config: config,
-                persistence: mockPersistence
+                persistence: persistence
             )
 
             let allocationPlan = try await allocationManager.createAllocationPlan(amount: amount)
 
 
-            for (index, altcoin) in allocationPlan.adjustedAllocation.altcoins.enumerated() {
-                let percentage = String(format: "%.1f", altcoin.percentage * 100)
+            for (_, altcoin) in allocationPlan.adjustedAllocation.altcoins.enumerated() {
+                _ = String(format: "%.1f", altcoin.percentage * 100)
             }
         }
 

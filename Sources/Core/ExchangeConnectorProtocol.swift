@@ -101,4 +101,26 @@ public protocol ExchangeConnector: Sendable {
     func placeOrder(symbol: String, side: OrderSide, type: OrderType, quantity: Double, price: Double) async throws -> Order
 }
 
+// MARK: - Extended Holdings Protocol
+
+public extension ExchangeConnector {
+    /// Fetch account holdings/balances for the exchange
+    /// Default implementation throws not implemented error
+    func getHoldings() async throws -> [[String: Any]] {
+        throw ArbitrageError.logic(.internalError(
+            component: "ExchangeConnector",
+            reason: "getHoldings not implemented for \(name)"
+        ))
+    }
+
+    /// Fetch account details
+    /// Default implementation throws not implemented error
+    func getAccountBalance() async throws -> [String: String] {
+        throw ArbitrageError.logic(.internalError(
+            component: "ExchangeConnector",
+            reason: "getAccountBalance not implemented for \(name)"
+        ))
+    }
+}
+
 public typealias ExchangeConnectorProtocol = ExchangeConnector

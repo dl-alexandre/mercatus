@@ -417,4 +417,14 @@ public actor BaseExchangeConnector: ExchangeConnector {
         // Default implementation - override in subclasses
         throw ArbitrageError.logic(.internalError(component: "BaseExchangeConnector", reason: "placeOrder not implemented for \(name)"))
     }
+
+    public func getHoldings() async throws -> [[String: Any]] {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BaseExchangeConnector", reason: "getHoldings not implemented for \(name)"))
+    }
+
+    public func getAccountBalance() async throws -> [String: String] {
+        // Default implementation - override in subclasses
+        throw ArbitrageError.logic(.internalError(component: "BaseExchangeConnector", reason: "getAccountBalance not implemented for \(name)"))
+    }
 }
