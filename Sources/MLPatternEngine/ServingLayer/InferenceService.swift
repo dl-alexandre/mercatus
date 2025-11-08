@@ -124,17 +124,39 @@ public class MockCacheManager: CacheManagerProtocol {
                 return nil
             }
 
-            return try JSONDecoder().decode(type, from: cached.value)
+            do {
+                return try JSONDecoder().decode(type, from: cached.value)
+            } catch {
+                logger.debug(component: "MockCacheManager", event: "Failed to decode cached value", data: [
+                    "key": key,
+                    "error": error.localizedDescription
+                ])
+                cache.removeValue(forKey: key)
+                return nil
+            }
         }
     }
 
     public func set<T: Codable>(key: String, value: T, ttl: TimeInterval) async throws {
-        logger.info(component: "MockCacheManager", event: "Setting cache value for key: \(key), value: \(value), type: \(type(of: value))")
-        let data = try JSONEncoder().encode(value)
-        let expiry = Date().addingTimeInterval(ttl)
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = []
+            let data = try encoder.encode(value)
+            let expiry = Date().addingTimeInterval(ttl)
 
-        cacheQueue.sync {
-            cache[key] = (data, expiry)
+            cacheQueue.sync(flags: .barrier) {
+                cache[key] = (data, expiry)
+            }
+
+            logger.debug(component: "MockCacheManager", event: "Cache value set", data: [
+                "key": key,
+                "size": String(data.count)
+            ])
+        } catch {
+            logger.debug(component: "MockCacheManager", event: "Failed to cache value (non-fatal)", data: [
+                "key": key,
+                "error": error.localizedDescription
+            ])
         }
     }
 

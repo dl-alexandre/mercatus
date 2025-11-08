@@ -28,8 +28,11 @@ public class DataQualityValidator: DataQualityValidatorProtocol {
 
         let qualityScore = calculateQualityScore([dataPoint])
 
+        // Data is invalid if it has any critical issues (like zero prices)
+        let isValid = issues.isEmpty || issues.allSatisfy { $0.severity != .critical }
+
         return DataQualityResult(
-            isValid: issues.isEmpty || issues.allSatisfy { $0.severity != .critical },
+            isValid: isValid,
             qualityScore: qualityScore,
             issues: issues
         )
@@ -89,11 +92,49 @@ public class DataQualityValidator: DataQualityValidatorProtocol {
     private func validatePrices(_ dataPoint: MarketDataPoint) -> [DataQualityIssue] {
         var issues: [DataQualityIssue] = []
 
+        // Check for zero or negative prices
+        if dataPoint.open <= 0 {
+            issues.append(DataQualityIssue(
+                type: .outlier,
+                severity: .critical,
+                message: "Open price is zero or negative: \(dataPoint.open)",
+                timestamp: dataPoint.timestamp
+            ))
+        }
+
+        if dataPoint.high <= 0 {
+            issues.append(DataQualityIssue(
+                type: .outlier,
+                severity: .critical,
+                message: "High price is zero or negative: \(dataPoint.high)",
+                timestamp: dataPoint.timestamp
+            ))
+        }
+
+        if dataPoint.low <= 0 {
+            issues.append(DataQualityIssue(
+                type: .outlier,
+                severity: .critical,
+                message: "Low price is zero or negative: \(dataPoint.low)",
+                timestamp: dataPoint.timestamp
+            ))
+        }
+
+        if dataPoint.close <= 0 {
+            issues.append(DataQualityIssue(
+                type: .outlier,
+                severity: .critical,
+                message: "Close price is zero or negative: \(dataPoint.close)",
+                timestamp: dataPoint.timestamp
+            ))
+        }
+
+        // Check price relationships
         if dataPoint.high < dataPoint.low {
             issues.append(DataQualityIssue(
                 type: .outlier,
                 severity: .critical,
-                message: "High price is less than low price",
+                message: "High price (\(dataPoint.high)) is less than low price (\(dataPoint.low))",
                 timestamp: dataPoint.timestamp
             ))
         }
@@ -101,8 +142,8 @@ public class DataQualityValidator: DataQualityValidatorProtocol {
         if dataPoint.high < dataPoint.open || dataPoint.high < dataPoint.close {
             issues.append(DataQualityIssue(
                 type: .outlier,
-                severity: .critical,
-                message: "High price is less than open or close price",
+                severity: .high,
+                message: "High price (\(dataPoint.high)) is less than open (\(dataPoint.open)) or close (\(dataPoint.close))",
                 timestamp: dataPoint.timestamp
             ))
         }
@@ -110,8 +151,8 @@ public class DataQualityValidator: DataQualityValidatorProtocol {
         if dataPoint.low > dataPoint.open || dataPoint.low > dataPoint.close {
             issues.append(DataQualityIssue(
                 type: .outlier,
-                severity: .critical,
-                message: "Low price is greater than open or close price",
+                severity: .high,
+                message: "Low price (\(dataPoint.low)) is greater than open (\(dataPoint.open)) or close (\(dataPoint.close))",
                 timestamp: dataPoint.timestamp
             ))
         }

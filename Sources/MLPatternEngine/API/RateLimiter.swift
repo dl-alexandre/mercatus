@@ -1,11 +1,11 @@
 import Foundation
+import Synchronization
 import Utils
 
 public class RateLimiter {
     private let maxRequests: Int
     private let windowSize: TimeInterval
-    private var requestCounts: [String: [Date]] = [:]
-    private let lock = NSLock()
+    private let requestCounts = Mutex([String: [Date]]())
 
     public init(maxRequests: Int, windowSize: TimeInterval) {
         self.maxRequests = maxRequests
@@ -14,94 +14,83 @@ public class RateLimiter {
 
     public func checkLimit(for identifier: String) async throws -> Bool {
         return await withCheckedContinuation { continuation in
-            lock.lock()
-            defer { lock.unlock() }
-
             let now = Date()
             let windowStart = now.addingTimeInterval(-windowSize)
 
-            // Clean up old requests
-            if var requests = requestCounts[identifier] {
-                requests = requests.filter { $0 > windowStart }
-                requestCounts[identifier] = requests
+            requestCounts.withLock { counts in
+                if var requests = counts[identifier] {
+                    requests = requests.filter { $0 > windowStart }
+                    counts[identifier] = requests
 
-                // Check if limit exceeded
-                if requests.count >= maxRequests {
-                    continuation.resume(returning: false)
-                    return
+                    if requests.count >= maxRequests {
+                        continuation.resume(returning: false)
+                        return
+                    }
+
+                    requests.append(now)
+                    counts[identifier] = requests
+                } else {
+                    counts[identifier] = [now]
                 }
 
-                // Add current request
-                requests.append(now)
-                requestCounts[identifier] = requests
-            } else {
-                // First request for this identifier
-                requestCounts[identifier] = [now]
+                continuation.resume(returning: true)
             }
-
-            continuation.resume(returning: true)
         }
     }
 
     public func getRemainingRequests(for identifier: String) -> Int {
-        lock.lock()
-        defer { lock.unlock() }
-
         let now = Date()
         let windowStart = now.addingTimeInterval(-windowSize)
 
-        guard let requests = requestCounts[identifier] else {
-            return maxRequests
-        }
+        return requestCounts.withLock { counts in
+            guard let requests = counts[identifier] else {
+                return maxRequests
+            }
 
-        let validRequests = requests.filter { $0 > windowStart }
-        return max(0, maxRequests - validRequests.count)
+            let validRequests = requests.filter { $0 > windowStart }
+            return max(0, maxRequests - validRequests.count)
+        }
     }
 
     public func getResetTime(for identifier: String) -> Date? {
-        lock.lock()
-        defer { lock.unlock() }
+        return requestCounts.withLock { counts in
+            guard let requests = counts[identifier], !requests.isEmpty else {
+                return nil
+            }
 
-        guard let requests = requestCounts[identifier], !requests.isEmpty else {
-            return nil
+            let oldestRequest = requests.min() ?? Date()
+            return oldestRequest.addingTimeInterval(windowSize)
         }
-
-        let oldestRequest = requests.min() ?? Date()
-        return oldestRequest.addingTimeInterval(windowSize)
     }
 
     public func resetLimit(for identifier: String) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        requestCounts.removeValue(forKey: identifier)
+        requestCounts.withLock { _ = $0.removeValue(forKey: identifier) }
     }
 
     public func getStats() -> RateLimitStats {
-        lock.lock()
-        defer { lock.unlock() }
-
         let now = Date()
         let windowStart = now.addingTimeInterval(-windowSize)
 
-        var totalRequests = 0
-        var activeIdentifiers = 0
+        return requestCounts.withLock { counts in
+            var totalRequests = 0
+            var activeIdentifiers = 0
 
-        for (_, requests) in requestCounts {
-            let validRequests = requests.filter { $0 > windowStart }
-            totalRequests += validRequests.count
-            if !validRequests.isEmpty {
-                activeIdentifiers += 1
+            for (_, requests) in counts {
+                let validRequests = requests.filter { $0 > windowStart }
+                totalRequests += validRequests.count
+                if !validRequests.isEmpty {
+                    activeIdentifiers += 1
+                }
             }
-        }
 
-        return RateLimitStats(
-            totalRequests: totalRequests,
-            activeIdentifiers: activeIdentifiers,
-            maxRequestsPerWindow: maxRequests,
-            windowSize: windowSize,
-            timestamp: now
-        )
+            return RateLimitStats(
+                totalRequests: totalRequests,
+                activeIdentifiers: activeIdentifiers,
+                maxRequestsPerWindow: maxRequests,
+                windowSize: windowSize,
+                timestamp: now
+            )
+        }
     }
 }
 
@@ -116,8 +105,7 @@ public struct RateLimitStats {
 public class AdvancedRateLimiter {
     private let rules: [RateLimitRule]
     private let logger: StructuredLogger
-    private var requestCounts: [String: [RateLimitEntry]] = [:]
-    private let lock = NSLock()
+    private let requestCounts = Mutex([String: [RateLimitEntry]]())
 
     public init(rules: [RateLimitRule], logger: StructuredLogger) {
         self.rules = rules
@@ -126,47 +114,57 @@ public class AdvancedRateLimiter {
 
     public func checkLimit(for identifier: String, endpoint: String, userRole: String?) async throws -> RateLimitResult {
         return await withCheckedContinuation { continuation in
-            lock.lock()
-            defer { lock.unlock() }
-
             let now = Date()
 
-            // Find applicable rule
             guard let rule = findApplicableRule(endpoint: endpoint, userRole: userRole) else {
                 continuation.resume(returning: RateLimitResult(allowed: true, remainingRequests: Int.max, resetTime: nil))
                 return
             }
 
-            // Clean up old entries
-            cleanupOldEntries(for: identifier, now: now)
+            requestCounts.withLock { counts in
+                if var entries = counts[identifier] {
+                    entries = entries.filter { entry in
+                        now.timeIntervalSince(entry.timestamp) <= 3600
+                    }
+                    counts[identifier] = entries
+                }
 
-            // Check current count
-            let currentCount = getCurrentCount(for: identifier, rule: rule, now: now)
+                let windowStart = now.addingTimeInterval(-rule.windowSize)
+                let currentCount = counts[identifier]?.filter { $0.timestamp > windowStart }.count ?? 0
 
-            if currentCount >= rule.maxRequests {
-                logger.warn(component: "AdvancedRateLimiter", event: "Rate limit exceeded", data: [
-                    "identifier": identifier,
-                    "endpoint": endpoint,
-                    "currentCount": String(currentCount),
-                    "maxRequests": String(rule.maxRequests)
-                ])
+                if currentCount >= rule.maxRequests {
+                    logger.warn(component: "AdvancedRateLimiter", event: "Rate limit exceeded", data: [
+                        "identifier": identifier,
+                        "endpoint": endpoint,
+                        "currentCount": String(currentCount),
+                        "maxRequests": String(rule.maxRequests)
+                    ])
+
+                    let oldestEntry = counts[identifier]?.filter { $0.timestamp > windowStart }.min { $0.timestamp < $1.timestamp }
+                    let resetTime = oldestEntry?.timestamp.addingTimeInterval(rule.windowSize)
+
+                    continuation.resume(returning: RateLimitResult(
+                        allowed: false,
+                        remainingRequests: 0,
+                        resetTime: resetTime
+                    ))
+                    return
+                }
+
+                if counts[identifier] == nil {
+                    counts[identifier] = []
+                }
+                counts[identifier]?.append(RateLimitEntry(timestamp: now))
+
+                let oldestEntry = counts[identifier]?.filter { $0.timestamp > windowStart }.min { $0.timestamp < $1.timestamp }
+                let resetTime = oldestEntry?.timestamp.addingTimeInterval(rule.windowSize)
 
                 continuation.resume(returning: RateLimitResult(
-                    allowed: false,
-                    remainingRequests: 0,
-                    resetTime: getResetTime(for: identifier, rule: rule, now: now)
+                    allowed: true,
+                    remainingRequests: rule.maxRequests - currentCount - 1,
+                    resetTime: resetTime
                 ))
-                return
             }
-
-            // Record new request
-            recordRequest(for: identifier, now: now)
-
-            continuation.resume(returning: RateLimitResult(
-                allowed: true,
-                remainingRequests: rule.maxRequests - currentCount - 1,
-                resetTime: getResetTime(for: identifier, rule: rule, now: now)
-            ))
         }
     }
 
@@ -180,41 +178,6 @@ public class AdvancedRateLimiter {
         return nil
     }
 
-    private func cleanupOldEntries(for identifier: String, now: Date) {
-        guard var entries = requestCounts[identifier] else { return }
-
-        entries = entries.filter { entry in
-            now.timeIntervalSince(entry.timestamp) <= 3600 // Keep last hour
-        }
-
-        requestCounts[identifier] = entries
-    }
-
-    private func getCurrentCount(for identifier: String, rule: RateLimitRule, now: Date) -> Int {
-        guard let entries = requestCounts[identifier] else { return 0 }
-
-        let windowStart = now.addingTimeInterval(-rule.windowSize)
-        return entries.filter { $0.timestamp > windowStart }.count
-    }
-
-    private func recordRequest(for identifier: String, now: Date) {
-        if requestCounts[identifier] == nil {
-            requestCounts[identifier] = []
-        }
-
-        requestCounts[identifier]?.append(RateLimitEntry(timestamp: now))
-    }
-
-    private func getResetTime(for identifier: String, rule: RateLimitRule, now: Date) -> Date? {
-        guard let entries = requestCounts[identifier], !entries.isEmpty else {
-            return nil
-        }
-
-        let windowStart = now.addingTimeInterval(-rule.windowSize)
-        let oldestEntry = entries.filter { $0.timestamp > windowStart }.min { $0.timestamp < $1.timestamp }
-
-        return oldestEntry?.timestamp.addingTimeInterval(rule.windowSize)
-    }
 }
 
 public struct RateLimitRule {

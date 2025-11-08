@@ -1,0 +1,12 @@
+moveCursor(0,0)
+clearLine
+writeBytes(1 bytes)
+moveCursor(0,1)
+clearLine
+moveCursor(0,2)
+clearLine
+moveCursor(0,3)
+clearLine
+moveCursor(0,4)
+clearLine
+moveCursor(0,1)

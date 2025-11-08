@@ -4,41 +4,39 @@ A production-ready cryptocurrency trading platform built in Swift, featuring rea
 
 ## 🏗️ Architecture Overview
 
+Mercatus consists of three integrated components working together to provide comprehensive market analysis and automated trading:
+
 ### Core Components
 
-**ArbitrageEngine** - Real-time cryptocurrency arbitrage detection
-- Multi-exchange WebSocket connectivity (Kraken, Coinbase, Binance, Gemini)
-- Advanced spread detection with triangular arbitrage support
-- Realistic trade simulation with comprehensive fee modeling
-- Circuit breaker patterns and fault tolerance
-
 **MLPatternEngine** - Production-ready ML framework with real-time inference
-- **Fully Integrated**: Powers SmartVestor's default ML-based scoring system
-- Real-time price prediction with 99%+ confidence models
+- Real-time price prediction with high-confidence models
 - Comprehensive feature extraction (RSI, MACD, Bollinger Bands, volatility, momentum)
 - Pattern recognition (400+ patterns per coin: cup-and-handle, head-and-shoulders, etc.)
 - Volatility forecasting using GARCH models
 - REST API with OpenAPI 3.0 specification and JWT authentication
-- SQLite time-series storage with 996K+ historical data points
-- Intelligent caching with persistent JSON cache across sessions
+- SQLite time-series storage with extensive historical data
+- **MLX GPU Acceleration**: Optional Apple Silicon GPU acceleration (M3 Pro and later)
 
 **SmartVestor** - Automated investment management with ML-powered scoring
-- **🤖 ML-Powered Scoring (Default)**: Uses MLPatternEngine with real market data (996K+ historical data points)
-- **Real-time Analysis**: Price prediction (99%+ confidence), volatility forecasting, 400+ pattern recognition per coin
-- **Performance Optimized**: Sub-second response times with intelligent caching (5-minute TTL)
-- **Real Market Data**: Calculates actual market cap, volume, and price changes from historical data
-- **Fallback Support**: Rule-based scoring available with `--useRuleBased` flag
+- **🤖 ML-Powered Scoring (Default)**: Uses MLPatternEngine with real market data
+- **Real-time Analysis**: Price prediction, volatility forecasting, pattern recognition
+- **Performance Optimized**: Sub-second response times with intelligent caching
 - Multi-dimensional scoring system (fundamental, momentum, technical, liquidity, volatility)
-- Cross-exchange optimization with realistic fee modeling and priority-based execution
-- Dynamic rebalancing with 5% threshold and 7-day interval checks
-- Risk management with 10% max portfolio risk and 8% stop-loss protection
+- Cross-exchange optimization with realistic fee modeling
+- Dynamic rebalancing with configurable thresholds
+- Risk management with stop-loss protection and portfolio limits
 - Automated deposit monitoring and execution
-- SQLite-based transaction tracking and audit trails
+
+**ArbitrageEngine** - Real-time arbitrage detection across exchanges
+- Multi-exchange spread analysis (Kraken, Coinbase, Gemini)
+- Real-time arbitrage opportunity detection
+- Circuit breaker pattern for fault tolerance
+- Performance monitoring and health checks
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- macOS 13+
+- macOS 13+ (14+ recommended for MLX GPU acceleration)
 - Swift 6.2+
 - Xcode Command Line Tools
 - Docker (for MLPatternEngine production deployment)
@@ -48,573 +46,200 @@ A production-ready cryptocurrency trading platform built in Swift, featuring rea
 swift build
 ```
 
-### Run ArbitrageEngine
-```bash
-ARBITRAGE_CONFIG_FILE=config/config.json .build/debug/ArbitrageEngine
+### Setup MLX GPU Acceleration (Optional, for M3 Pro and later)
+
+**Important:** MLX's C++ core initializes at library load time, before any Swift code runs. The `default.metallib` file must exist in one of MLX's search paths before the executable starts, otherwise you'll see:
+
+```
+MLX error: Failed to load the default metallib. library not found
 ```
 
-### Run SmartVestor CLI
-```bash
-# Check system status
-swift run SmartVestorCLI status
+MLX searches for the metallib in this order:
+1. Current working directory
+2. Colocated with the executable (as `mlx.metallib` or `default.metallib`)
+3. `~/.mlx/default.metallib`
+4. `/usr/local/share/mlx/default.metallib`
+5. `METAL_PATH` environment variable
 
-# Get top 5 coin recommendations with ML-powered scoring (DEFAULT)
-# Uses real market data, 996K+ historical points, sub-second cached results
-swift run SmartVestorCLI coins --detailed --limit 5
+**Recommended: Use the launcher script (easiest)**
 
-# Filter to Robinhood-supported cryptocurrencies only
-swift run SmartVestorCLI coins --robinhood --detailed --limit 10
-
-# Check account balances including Robinhood
-swift run SmartVestorCLI balance
-
-# Check only Robinhood balance
-swift run SmartVestorCLI balance --robinhood
-
-# Use rule-based scoring instead (statistical analysis fallback)
-swift run SmartVestorCLI coins --useRuleBased --detailed --limit 5
-
-# Create allocation plan
-swift run SmartVestorCLI allocate --amount 5000 --maxPositions 8
-```
-
-### Deploy MLPatternEngine (Production)
-```bash
-./scripts/deploy.sh deploy
-```
-
-## 🎯 SmartVestor CLI - Intelligent Cryptocurrency Analysis
-
-SmartVestor CLI provides powerful command-line tools for cryptocurrency analysis and portfolio management. Here are the key features that make it invaluable for investors:
-
-### 🔍 Advanced Coin Analysis (`coins` command)
-
-The `coins` command performs comprehensive cryptocurrency analysis using multi-dimensional scoring:
-
-#### Basic Usage
-```bash
-# Get top 10 coin recommendations
-swift run SmartVestorCLI coins
-
-# Get top 5 coins with detailed scoring breakdown
-swift run SmartVestorCLI coins --detailed --limit 5
-```
-
-#### Detailed Scoring Output
-When using `--detailed`, you get comprehensive analysis including:
-- **Technical Score**: RSI, MACD, Bollinger Bands analysis
-- **Fundamental Score**: Market cap, volume, project metrics
-- **Momentum Score**: Price trends and momentum indicators
-- **Volatility Score**: Risk assessment and price stability
-- **Liquidity Score**: Trading volume and market depth
-- **Price Changes**: 24h, 7d, and 30d performance metrics
-
-#### JSON Output (Default)
-```json
-{
-  "coins": [
-    {
-      "symbol": "MEW",
-      "totalScore": 0.8498909449117755,
-      "technicalScore": 0.5,
-      "fundamentalScore": 0.6,
-      "momentumScore": 0.9685862659249849,
-      "volatilityScore": 0.9981881284726053,
-      "liquidityScore": 0.7,
-      "category": "infrastructure",
-      "riskLevel": "low",
-      "marketCap": 1870607.6058864307,
-      "volume24h": 32907799.110389628,
-      "priceChange24h": -0.03402926228451453,
-      "priceChange7d": 0.003247262758739976,
-      "priceChange30d": -0.2909800115848102,
-      "lastUpdated": 783406101.190414,
-      "id": "28C56323-9F51-4D0E-B43C-1A01F2125DC0"
-    }
-  ],
-  "method": "ml_based",
-  "limit": 1,
-  "robinhood_only": false
-}
-```
-
-#### Detailed Text Output (`--detailed` flag)
-```
-Detailed Coin Scores (Top 1):
-Method: ml_based
-
-Symbol: MEW
-  Total Score: 0.850
-  Technical: 0.50
-  Fundamental: 0.60
-  Momentum: 0.97
-  Volatility: 1.00
-  Liquidity: 0.70
-  Market Cap: 1.9M
-  Category: infrastructure
-```
-
-### 🏦 Robinhood Integration (`--robinhood` flag)
-
-The `--robinhood` flag filters results to only show cryptocurrencies available on Robinhood, making it perfect for users who prefer the Robinhood platform:
-
-#### Robinhood-Supported Cryptocurrencies
-The system includes 28+ Robinhood-supported coins including:
-- **Major Cryptocurrencies**: BTC, ETH, DOGE, LTC, BCH, ETC, BSV, USDC
-- **Layer 1 Protocols**: ADA, DOT, SOL, AVAX
-- **DeFi Tokens**: UNI, LINK, COMP, AAVE, YFI, SUSHI, MKR, SNX, CRV, 1INCH
-- **Utility Tokens**: XLM, MATIC, BAT, REN, LRC
-- **Meme Coins**: SHIB
-
-#### Usage Examples
-```bash
-# Get top 10 Robinhood-supported coins
-swift run SmartVestorCLI coins --robinhood --limit 10
-
-# Detailed analysis of Robinhood coins only
-swift run SmartVestorCLI coins --robinhood --detailed --limit 5
-
-# Filter by category within Robinhood coins
-swift run SmartVestorCLI coins --robinhood --category defi --detailed
-```
-
-#### Why Robinhood Integration Matters
-- **Accessibility**: Robinhood offers commission-free crypto trading
-- **User-Friendly**: Simplified interface for beginners
-- **Instant Settlement**: No waiting periods for deposits
-- **Mobile-First**: Excellent mobile trading experience
-- **Regulatory Compliance**: Fully licensed and regulated
-
-### 📊 Multi-Provider Market Data
-
-SmartVestor CLI uses a sophisticated multi-provider market data system:
-
-#### Data Sources (in priority order)
-1. **CoinGecko API** - Comprehensive market data
-2. **CryptoCompare** - Real-time price feeds
-3. **Binance** - Exchange-specific data
-4. **CoinMarketCap** - Market cap and rankings
-5. **Coinbase** - Institutional-grade data
-
-#### Benefits
-- **Redundancy**: Multiple data sources ensure reliability
-- **Accuracy**: Cross-validation across providers
-- **Completeness**: Comprehensive coverage of all metrics
-- **Real-time**: Live data updates for accurate analysis
-
-### 🎯 Scoring Algorithm
-
-The SmartVestor scoring system uses weighted analysis:
-
-#### Scoring Weights
-- **Fundamental Analysis**: 35% (market cap, volume, project metrics)
-- **Momentum Analysis**: 20% (price trends, momentum indicators)
-- **Technical Analysis**: 20% (RSI, MACD, Bollinger Bands)
-- **Liquidity Analysis**: 15% (trading volume, market depth)
-- **Volatility Analysis**: 10% (risk assessment, price stability)
-
-#### Risk Categories
-- **Low Risk**: Established cryptocurrencies with stable fundamentals
-- **Medium Risk**: Growing projects with moderate volatility
-- **High Risk**: Emerging or volatile cryptocurrencies
-
-### ⚡ Performance & Caching
-
-**Intelligent Caching System:**
-- **First Run**: ~8 seconds (fetches historical data, runs ML inference)
-- **Subsequent Runs**: <1 second (uses cached results)
-- **Cache TTL**: 5 minutes (configurable)
-- **Persistent Storage**: JSON cache survives terminal sessions
-- **Auto-refresh**: Cache invalidates after TTL, ensuring fresh data
-
-**Why It's Fast:**
-- **Historical Data**: 996K+ cached data points in SQLite
-- **Smart Caching**: Only fetches data when missing or stale
-- **Batch Inference**: Processes all coins efficiently
-- **Real-time Updates**: Fresh data available every 5 minutes
-
-### 💼 Portfolio Allocation (`allocate` command)
-
-Create intelligent portfolio allocation plans:
+The launcher script automatically ensures the metallib is in place before running:
 
 ```bash
-# Traditional BTC/ETH/Altcoin allocation
-swift run SmartVestorCLI allocate --amount 10000
+# For debug builds
+./scripts/run-smartvestor.sh debug coins --limit 5
 
-# Score-based allocation (no anchor coins)
-swift run SmartVestorCLI allocate --amount 5000 --scoreBased --maxPositions 8
+# For release builds
+./scripts/run-smartvestor.sh release coins --limit 5
 ```
 
-#### Allocation Strategies
-1. **Traditional**: 40% BTC, 30% ETH, 30% altcoins
-2. **Score-Based**: Pure merit-based allocation using SmartVestor scores
-3. **Risk-Adjusted**: Volatility-adjusted position sizing
+**Alternative 1: Ensure metallib before `swift run`**
 
-### 🚀 Practical Use Cases
-
-#### For Beginners
-```bash
-# Start with Robinhood-friendly recommendations
-swift run SmartVestorCLI coins --robinhood --detailed --limit 5
-
-# Create a conservative allocation plan
-swift run SmartVestorCLI allocate --amount 1000 --maxPositions 5
-```
-
-#### For Advanced Investors
-```bash
-# Get comprehensive market analysis
-swift run SmartVestorCLI coins --detailed --limit 20
-
-# Create sophisticated portfolio
-swift run SmartVestorCLI allocate --amount 50000 --scoreBased --maxPositions 15
-```
-
-#### For Specific Strategies
-```bash
-# Focus on DeFi tokens
-swift run SmartVestorCLI coins --category defi --detailed --limit 10
-
-# Layer 1 protocols only
-swift run SmartVestorCLI coins --category layer1 --detailed --limit 8
-```
-
-### 🔧 Configuration
-
-SmartVestor CLI automatically loads configuration from `config/smartvestor_config.json`:
-
-```json
-{
-  "marketDataProvider": {
-    "type": "multi",
-    "providerOrder": ["coinGecko", "cryptoCompare", "binance"],
-    "coinGeckoAPIKey": "your-api-key",
-    "coinMarketCapAPIKey": "your-api-key"
-  },
-  "scoringWeights": {
-    "fundamental": 0.35,
-    "momentum": 0.20,
-    "technical": 0.20,
-    "liquidity": 0.15,
-    "volatility": 0.10
-  }
-}
-```
-
-## 📊 System Capabilities
-
-### ArbitrageEngine Results
-**Live Test Results (32 trades simulated):**
-- Starting Balance: $10,000.00
-- Ending Balance: $9,952.27
-- **Total Loss: -$47.73 (-0.48%)**
-- Success Rate: 0% (all trades unprofitable after fees)
-
-**Key Finding:** Retail arbitrage is mathematically unprofitable due to:
-- Exchange fees (0.2% round trip) exceed typical spreads (0.02-0.08%)
-- Professional traders have structural advantages (rebates, co-location, volume discounts)
-- Market efficiency eliminates simple arbitrage opportunities
-
-### MLPatternEngine Performance
-- **Latency**: < 100ms average response time
-- **Throughput**: 100+ requests per second
-- **Accuracy**: 70%+ prediction accuracy on test data
-- **Pattern Recognition**: 7+ chart pattern types with confidence scoring
-- **Availability**: 99.9% uptime target
-
-### SmartVestor Features
-- **🤖 ML-Powered Analysis (Default)**: Machine learning models for price prediction (99%+ confidence), volatility forecasting using GARCH, 400+ pattern recognition per coin
-- **Real Market Data**: Calculates actual market cap, volume (24h/7d/30d changes) from 996K+ historical data points
-- **Performance Optimized**: Sub-second response times (0.9s cached, 8s fresh) with intelligent 5-minute TTL caching
-- **Persistent Cache**: JSON-based caching across terminal sessions, prevents redundant inference and API calls
-- **Fallback Support**: Rule-based scoring (RSI, MACD, Bollinger Bands, trend analysis) available with `--useRuleBased` flag
-- **Optimized Allocation Strategy**: 30/30/40 BTC/ETH/Altcoin with score-based optimization and 40% altcoin allocation
-- **Advanced Risk Management**: 10% max portfolio risk with 8% stop-loss protection and dynamic volatility adjustment (1.3x multiplier)
-- **Dynamic Rebalancing**: 5% threshold with 7-day interval checks for responsive portfolio management
-- **Realistic Exchange Modeling**: Priority-based execution with exchange-specific fees (Kraken: 0.16%/0.26%, Coinbase: 0.5%/0.5%, Gemini: 0.25%/0.25%)
-- **Enhanced Staking**: 3-day grace period and 90% yield adjustment for realistic staking management
-- **Market Data Optimization**: Multi-provider fallback with 60-second cache TTL for improved resilience
-- **Robinhood Integration**: Filter recommendations to Robinhood-supported cryptocurrencies (28+ coins)
-- **Multi-Provider Data**: Real-time market data from CoinGecko, CryptoCompare, Binance, CoinMarketCap, and Coinbase
-- **Advanced CLI Tools**: `coins --detailed --limit 5` for comprehensive analysis, `--robinhood` flag for platform-specific filtering
-- **Deposit Monitoring**: Automated USDC deposit detection (100 USDC ± tolerance)
-- **Audit Trail**: Complete transaction history with tamper evidence
-
-## ⚙️ Configuration
-
-### ArbitrageEngine Configuration
-Create `config/config.json`:
-```json
-{
-  "coinbaseCredentials": { "apiKey": "public", "apiSecret": "public" },
-  "krakenCredentials": { "apiKey": "public", "apiSecret": "public" },
-  "binanceCredentials": { "apiKey": "dummy", "apiSecret": "dummy" },
-  "geminiCredentials": { "apiKey": "dummy", "apiSecret": "dummy" },
-  "tradingPairs": [
-    { "base": "BTC", "quote": "USD" },
-    { "base": "ETH", "quote": "USD" },
-    { "base": "SOL", "quote": "USD" }
-  ],
-  "thresholds": {
-    "minimumSpreadPercentage": 0.0003,
-    "maximumLatencyMilliseconds": 2000.0
-  },
-  "defaults": {
-    "virtualUSDStartingBalance": 10000.0
-  }
-}
-```
-
-### SmartVestor Configuration
-Create `config/smartvestor_config.json`:
-```json
-{
-  "allocationMode": "score_based",
-  "baseAllocation": {
-    "btc": 0.3,
-    "eth": 0.3,
-    "altcoins": 0.4,
-    "stablecoins": 0.0
-  },
-  "maxPortfolioRisk": 0.10,
-  "stopLossThreshold": 0.08,
-  "scoreBasedAllocation": {
-    "rebalancingThreshold": 0.05,
-    "rebalanceIntervalDays": 7
-  },
-  "scoreWeights": {
-    "fundamental": 0.35,
-    "momentum": 0.20,
-    "technical": 0.20,
-    "liquidity": 0.15,
-    "volatility": 0.10
-  },
-  "exchanges": [
-    {
-      "name": "kraken",
-      "enabled": true,
-      "priority": 1,
-      "fees": { "maker": 0.0016, "taker": 0.0026 },
-      "supportedNetworks": ["USDC-ETH", "USDC-SOL"]
-    }
-  ],
-  "staking": {
-    "enabled": true,
-    "unstakeGracePeriodDays": 3,
-    "yieldAdjustment": 0.9
-  }
-}
-```
-
-### MLPatternEngine Configuration
-Environment variables for production:
-```bash
-export ML_ENGINE_REDIS_URL=redis://localhost:6379
-export ML_ENGINE_POSTGRES_URL=postgresql://user:pass@localhost:5432/mlengine
-export ML_ENGINE_JWT_SECRET=your-secret-key
-export ML_ENGINE_API_PORT=8080
-```
-
-### Robinhood Integration
-The platform includes Robinhood API integration for checking account balances and placing trades.
-
-#### Setup Credentials via .env File
-Create a `.env` file in the project root with your Robinhood credentials:
+Run this before using `swift run`:
 
 ```bash
-# .env file
-ROBINHOOD_API_KEY=rh-api-your-key-here
-ROBINHOOD_PRIVATE_KEY=your-base64-encoded-private-key-here
+source scripts/ensure-mlx-metallib.sh
+swift run SmartVestorCLI coins --limit 5
 ```
 
-The system will automatically load these environment variables from the `.env` file.
+Or add to your `~/.zshrc` to make it automatic:
 
-**Note:** With just the API key, you can check balances but cannot place orders (full authentication with private key signature required for trading).
-
-#### Alternative: Using Environment Variables Directly
-You can also set environment variables directly:
 ```bash
-export ROBINHOOD_API_KEY=rh-api-your-key-here
-export ROBINHOOD_PRIVATE_KEY=your-base64-encoded-private-key-here
+source /path/to/mercatus/scripts/smartvestor-shell-setup.sh
 ```
 
-#### Generate Ed25519 Key Pair
-To create API credentials, you need to generate an Ed25519 key pair:
-```python
-import nacl.signing
-import base64
+Then use `sv-run` instead of `swift run`:
 
-# Generate key pair
-private_key = nacl.signing.SigningKey.generate()
-public_key = private_key.verify_key
-
-# Convert to base64
-private_key_base64 = base64.b64encode(private_key.encode()).decode()
-public_key_base64 = base64.b64encode(public_key.encode()).decode()
-
-print("Private Key (Base64):", private_key_base64)
-print("Public Key (Base64):", public_key_base64)
-```
-
-Upload the public key to Robinhood API Credentials Portal and use the private key for signing requests.
-
-#### Check Robinhood Balance
 ```bash
-# Check all balances including Robinhood
-swift run SmartVestorCLI balance
-
-# Check only Robinhood balance
-swift run SmartVestorCLI balance --robinhood
-
-# Detailed balance breakdown
-swift run SmartVestorCLI balance --detailed
+sv-run SmartVestorCLI coins --limit 5
 ```
 
-#### Features
-- **Balance Checking**: Fetch crypto holdings from Robinhood account
-- **Ed25519 Authentication**: Secure key-pair based authentication
-- **Rate Limiting**: Built-in rate limiting (100 req/min, 300 burst)
-- **Account Integration**: Automatically syncs with SmartVestor holdings
+**Alternative 2: Build MLX metallib from sources**
 
-## 🎯 What This Platform Demonstrates
+The included `default.metallib` is a placeholder. You need to build the real MLX metallib:
 
-### Technical Excellence ✅
-- **Real-time Data Processing**: Multi-exchange WebSocket connectivity with sub-second latency
-- **Machine Learning Integration**: Production-ready ML pipeline with automated training and drift detection
-- **Portfolio Management**: Intelligent allocation strategies with cross-exchange optimization
-- **Production Infrastructure**: Containerized deployment with monitoring, security, and scalability
-
-### Market Insights ✅
-- **Arbitrage Reality**: Mathematical proof that retail arbitrage is unprofitable due to fees exceeding spreads
-- **Professional Advantages**: Understanding of why HFT firms succeed (rebates, co-location, volume discounts)
-- **Market Efficiency**: Modern crypto markets are highly efficient, eliminating simple opportunities
-- **Alternative Strategies**: Identification of viable approaches (triangular arbitrage, funding rates, statistical arbitrage)
-
-### Educational Value ✅
-- **Swift Concurrency**: Advanced async/await patterns and structured concurrency
-- **System Architecture**: Microservices, API design, database optimization
-- **Financial Engineering**: Understanding market microstructure and trading mechanics
-- **Production Practices**: Monitoring, security, testing, deployment automation
-
-## 🚀 Production Deployment
-
-### MLPatternEngine Production Stack
 ```bash
-# Deploy complete stack
-./scripts/deploy.sh deploy
-
-# Run production readiness validation
-./scripts/production-readiness.sh
-
-# Run security audit
-./scripts/security-audit.sh
+./scripts/build-mlx-metallib.sh
 ```
 
-### Monitoring & Observability
-- **Grafana Dashboards**: `http://localhost:3000`
-- **Prometheus Metrics**: `http://localhost:9090`
-- **API Documentation**: `http://localhost:8080/api/v1/docs`
-- **Health Checks**: `http://localhost:8080/api/v1/health`
+This builds the MLX metallib from the checked-out MLX sources using CMake. Requires:
+- `cmake` (install with `brew install cmake`)
+- `ninja` (optional, install with `brew install ninja`)
+
+**Alternative 3: Manual setup (one-time)**
+
+If you have a valid MLX metallib, copy it:
+
+```bash
+cp /path/to/mlx.metallib Sources/SmartVestorMLXAdapter/Resources/default.metallib
+./scripts/setup-mlx-metallib.sh
+```
+
+**Verify setup:**
+```bash
+strings Sources/SmartVestorMLXAdapter/Resources/default.metallib | grep -i rbitsc
+```
+
+If this command finds `rbitsc`, you have the correct metallib. If not, you need to build it from MLX sources.
+
+**Troubleshooting "illegal hardware instruction" crashes:**
+
+If you see this error after building the metallib:
+
+```bash
+zsh: illegal hardware instruction  swift run SmartVestorCLI coins --limit 1
+```
+
+This indicates a runtime issue with MLX's Metal backend, not a missing file. Try:
+
+1. **Verify metallib and executable architectures match:**
+   ```bash
+   file Sources/SmartVestorMLXAdapter/Resources/default.metallib
+   otool -hv .build/arm64-apple-macosx/debug/SmartVestorCLI | grep arm64
+   ```
+   Both should be `arm64` for Apple Silicon.
+
+2. **Validate the metallib format:**
+   ```bash
+   file Sources/SmartVestorMLXAdapter/Resources/default.metallib
+   ```
+   Should show "MetalLib executable (MacOS)".
+
+3. **Rebuild both in Release mode:**
+   ```bash
+   rm -rf .build/mlx-metallib-build
+   ./scripts/build-mlx-metallib.sh
+   swift build -c release
+   swift run -c release SmartVestorCLI coins --limit 1
+   ```
+
+4. **Check MLX version mismatch:**
+   Ensure the metallib was built from the same MLX commit as your Swift package:
+   ```bash
+   git -C .build/checkouts/mlx-swift log --oneline -1
+   cat Package.resolved | grep -A3 "mlx-swift" | grep revision
+   ```
+   If you updated the MLX package, rebuild the metallib:
+   ```bash
+   swift package resolve --reset
+   swift build
+   ./scripts/build-mlx-metallib.sh
+   ```
+
+5. **Test CPU mode (isolate GPU issue):**
+   ```bash
+   env MLX_DEVICE=cpu swift run -c release SmartVestorCLI coins --limit 1
+   ```
+   If this works, the crash is isolated to Metal GPU path.
+
+6. **Debug the crash with LLDB:**
+   ```bash
+   ./scripts/debug-mlx-crash.sh
+   ```
+   Or manually:
+   ```bash
+   lldb -- swift run -c release SmartVestorCLI coins --limit 1
+   (lldb) run
+   # When it crashes:
+   (lldb) bt
+   (lldb) disassemble -f
+   ```
+
+7. **Enable Metal validation:**
+   ```bash
+   env MTL_DEBUG_LAYER=1 MTL_ENABLE_DEBUG_INFO=1 swift run -c release SmartVestorCLI coins --limit 1
+   ```
+
+8. **Disable GPU completely (use rule-based):**
+   ```bash
+   env SV_DISABLE_GPU=1 swift run SmartVestorCLI coins --limit 1
+   ```
+
+9. **Test minimal MLX repro:**
+   ```bash
+   swift scripts/test-mlx-minimal.swift
+   ```
+   If this crashes, report to MLX Swift.
+
+10. **Generate bug report info:**
+    ```bash
+    ./scripts/generate-mlx-bug-report.sh
+    ```
+    This prints all diagnostic information needed for the MLX Swift bug report.
+
+    **Bug Report Template:**
+    See `docs/MLX_BUG_REPORT.md` for a complete bug report template with:
+    - Environment details
+    - MLX commit hash
+    - Metallib hash
+    - LLDB backtrace instructions
+    - Minimal reproduction code
+
+**Note:** MLX GPU acceleration requires:
+- Apple Silicon (M1/M2/M3 or later)
+- macOS 14+ for optimal performance
+- Metal-compatible GPU
+- Matching metallib and MLX Swift package versions
 
 ## 📚 Documentation
 
-- **[AGENTS.md](AGENTS.md)** - Development guide and build commands
-- **[docs/ARCHITECTURE_OVERVIEW.md](docs/ARCHITECTURE_OVERVIEW.md)** - Comprehensive platform architecture
-- **[docs/ML_USAGE_ANALYSIS.md](docs/ML_USAGE_ANALYSIS.md)** - ⚠️ **IMPORTANT**: Reality check on ML vs statistical analysis
-- **[docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)** - Complete API reference for MLPatternEngine and SmartVestor
-- **[docs/SmartVestor_README.md](docs/SmartVestor_README.md)** - SmartVestor system documentation
-- **[docs/PRODUCTION_READINESS_SUMMARY.md](docs/PRODUCTION_READINESS_SUMMARY.md)** - Production deployment status
-- **[docs/ANALYSIS.md](docs/ANALYSIS.md)** - Real-world arbitrage analysis and findings
-- **[Sources/MLPatternEngine/README.md](Sources/MLPatternEngine/README.md)** - MLPatternEngine technical documentation
+For comprehensive documentation including:
+- Detailed architecture overview
+- API documentation
+- Deployment guides
+- Testing strategies
+- Performance analysis
 
-## 🏆 Key Achievements
+See the [`docs/`](./docs/) directory and start with [`docs/README.md`](./docs/README.md).
 
-1. **Built Production-Grade Systems**: Three complete, integrated trading systems
-2. **Proved Market Reality**: Mathematical demonstration of arbitrage unprofitability
-3. **Advanced ML Integration**: Real-time prediction and pattern recognition
-4. **Comprehensive Testing**: Unit, integration, performance, and chaos engineering tests
-5. **Production Infrastructure**: Docker, monitoring, security, and deployment automation
+### Run SmartVestor CLI
 
-## License
-
-Educational project demonstrating comprehensive cryptocurrency trading system development and market analysis.
-
-## 🧪 Testing
-
-### Run All Tests
+**Without MLX (no GPU acceleration):**
 ```bash
-swift test
+swift run SmartVestorCLI coins --limit 5
 ```
 
-### Run Specific Test Suites
+**With MLX (use launcher to ensure metallib is available):**
 ```bash
-# ArbitrageEngine tests
-swift test --filter ArbitrageEngineTests
-
-# MLPatternEngine tests
-swift test --filter MLPatternEngineTests
-
-# SmartVestor tests
-swift test --filter SmartVestorTests
-
-# Performance tests
-swift test --filter PerformanceTests
-
-# End-to-end tests
-swift test --filter EndToEndTests
-
-# Chaos engineering tests
-swift test --filter ChaosEngineeringTests
-```
-
-### Test Coverage
-- **ArbitrageEngine**: Exchange connectors, spread detection, trade simulation, circuit breakers
-- **MLPatternEngine**: Feature extraction, pattern recognition, API endpoints, model training
-- **SmartVestor**: Allocation logic, deposit monitoring, cross-exchange analysis, execution engine
-- **Integration**: End-to-end workflows, performance validation, resilience testing
-
-## License
-
-Educational project demonstrating why arbitrage is harder than it looks.
-
----
-
-**Bottom Line:** You built a technically excellent system that proves a valuable lesson - modern crypto markets are too efficient for simple arbitrage. The real money is in market making, not arbitrage.
-
-## 🚀 Quick Reference - SmartVestor CLI Commands
-
-### Essential Commands
-```bash
-# Get top 5 coins with detailed analysis
-swift run SmartVestorCLI coins --detailed --limit 5
-
-# Robinhood-only recommendations
-swift run SmartVestorCLI coins --robinhood --detailed --limit 10
-
-# Create $10K allocation plan
-swift run SmartVestorCLI allocate --amount 10000 --maxPositions 12
-
-# Check system status
-swift run SmartVestorCLI status
-```
-
-### Advanced Filtering
-```bash
-# DeFi tokens only
-swift run SmartVestorCLI coins --category defi --detailed --limit 8
-
-# Layer 1 protocols
-swift run SmartVestorCLI coins --category layer1 --detailed --limit 6
-
-# Robinhood DeFi tokens
-swift run SmartVestorCLI coins --robinhood --category defi --detailed
-```
-
-### Portfolio Management
-```bash
-# Score-based allocation (no BTC/ETH anchor)
-swift run SmartVestorCLI allocate --scoreBased --amount 5000 --maxPositions 8
-
-# Conservative allocation
-swift run SmartVestorCLI allocate --amount 1000 --maxPositions 5
+./scripts/run-smartvestor.sh debug coins --limit 5
 ```

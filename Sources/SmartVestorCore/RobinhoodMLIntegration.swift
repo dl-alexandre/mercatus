@@ -87,7 +87,7 @@ public class RobinhoodMLIntegration: @unchecked Sendable {
             endDate: endDate
         )
 
-        guard let dataIngestion = mlEngine.dataIngestion else {
+        guard mlEngine.dataIngestion != nil else {
             throw MLIntegrationError.dataIngestionUnavailable
         }
 

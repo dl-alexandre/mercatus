@@ -82,8 +82,11 @@ public class CrossExchangeAnalyzer: CrossExchangeAnalyzerProtocol {
             throw SmartVestorError.exchangeError("No exchange data available for \(asset)")
         }
 
-        let bestExchange = exchangeSpreads.min { $0.value.totalCost < $1.value.totalCost }?.key ?? ""
-        let bestSpread = exchangeSpreads[bestExchange]!
+        guard let bestExchangePair = exchangeSpreads.min(by: { $0.value.totalCost < $1.value.totalCost }),
+              let bestSpread = exchangeSpreads[bestExchangePair.key] else {
+            throw SmartVestorError.exchangeError("Unable to determine best exchange for \(asset)")
+        }
+        let bestExchange = bestExchangePair.key
         let spreadPercentage = (bestSpread.totalCost / bestSpread.price) * 100
 
         return SpreadAnalysis(

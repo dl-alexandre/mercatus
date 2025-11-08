@@ -1,8 +1,8 @@
 import Foundation
 import Utils
 
-public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unchecked Sendable {
-    private let logger = StructuredLogger()
+public final class MultiProviderMarketDataProvider: MarketDataProviderProtocol, Sendable {
+    private let logger: StructuredLogger
     private let session = URLSession.shared
 
     // API Keys for different providers
@@ -17,7 +17,8 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
     // Provider preferences (in order of preference)
     private let providerOrder: [MarketDataProviderType]
 
-    public enum MarketDataProviderType: String, CaseIterable {
+    public enum MarketDataProviderType: String, CaseIterable, Sendable {
+        case robinhood = "robinhood"
         case coinGecko = "coingecko"
         case coinMarketCap = "coinmarketcap"
         case cryptoCompare = "cryptocompare"
@@ -34,8 +35,10 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
         binanceSecretKey: String? = nil,
         coinbaseAPIKey: String? = nil,
         coinbaseSecretKey: String? = nil,
-        providerOrder: [MarketDataProviderType] = [.coinGecko, .cryptoCompare, .binance, .coinMarketCap, .coinbase]
+        providerOrder: [MarketDataProviderType] = [.robinhood, .coinGecko, .cryptoCompare, .binance, .coinMarketCap, .coinbase],
+        logger: StructuredLogger = StructuredLogger()
     ) {
+        self.logger = logger
         // Try to get API keys from environment variables if not provided
         self.coinGeckoAPIKey = coinGeckoAPIKey ?? ProcessInfo.processInfo.environment["COINGECKO_API_KEY"]
         self.coinMarketCapAPIKey = coinMarketCapAPIKey ?? ProcessInfo.processInfo.environment["COINMARKETCAP_API_KEY"]
@@ -50,45 +53,60 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
     public func getHistoricalData(startDate: Date, endDate: Date, symbols: [String]) async throws -> [String: [MarketDataPoint]] {
         var data: [String: [MarketDataPoint]] = [:]
 
-        // Process symbols in parallel batches to avoid overwhelming APIs
         let batchSize = 10
         let batches = symbols.chunked(into: batchSize)
 
         for batch in batches {
-            let tasks = batch.map { symbol in
-                Task<[MarketDataPoint]?, Never> {
-                    var lastError: Error?
+            let batchResults = try await withThrowingTaskGroup(of: (String, [MarketDataPoint]?).self) { group in
+                var batchData: [String: [MarketDataPoint]?] = [:]
 
-                    for provider in self.providerOrder {
-                        do {
-                            let points = try await self.getHistoricalDataFromProvider(provider, symbol: symbol, startDate: startDate, endDate: endDate)
-                            self.logger.info(component: "MultiProviderMarketDataProvider", event: "Successfully got historical data", data: [
-                                "symbol": symbol,
-                                "provider": provider.rawValue
-                            ])
-                            return points
-                        } catch {
-                            lastError = error
-                            self.logger.warn(component: "MultiProviderMarketDataProvider", event: "Failed to get historical data from provider", data: [
-                                "symbol": symbol,
-                                "provider": provider.rawValue,
-                                "error": error.localizedDescription
-                            ])
+                for symbol in batch {
+                    group.addTask {
+                        var lastError: Error?
+
+                        for provider in self.providerOrder {
+                            do {
+                                guard !Task.isCancelled else {
+                                    return (symbol, nil)
+                                }
+
+                                let points = try await self.getHistoricalDataFromProvider(provider, symbol: symbol, startDate: startDate, endDate: endDate)
+                                self.logger.info(component: "MultiProviderMarketDataProvider", event: "Successfully got historical data", data: [
+                                    "symbol": symbol,
+                                    "provider": provider.rawValue
+                                ])
+                                return (symbol, points)
+                            } catch {
+                                lastError = error
+                                guard !Task.isCancelled else {
+                                    return (symbol, nil)
+                                }
+                                self.logger.warn(component: "MultiProviderMarketDataProvider", event: "Failed to get historical data from provider", data: [
+                                    "symbol": symbol,
+                                    "provider": provider.rawValue,
+                                    "error": error.localizedDescription
+                                ])
+                            }
                         }
-                    }
 
-                    self.logger.error(component: "MultiProviderMarketDataProvider", event: "Failed to get historical data from all providers", data: [
-                        "symbol": symbol,
-                        "error": lastError?.localizedDescription ?? "Unknown error"
-                    ])
-                    return nil
+                        self.logger.error(component: "MultiProviderMarketDataProvider", event: "Failed to get historical data from all providers", data: [
+                            "symbol": symbol,
+                            "error": lastError?.localizedDescription ?? "Unknown error"
+                        ])
+                        return (symbol, nil)
+                    }
                 }
+
+                for try await (symbol, points) in group {
+                    batchData[symbol] = points
+                }
+
+                return batchData
             }
 
-            // Wait for all tasks in this batch to complete
-            for (index, task) in tasks.enumerated() {
-                if let points = await task.value {
-                    data[batch[index]] = points
+            for (symbol, points) in batchResults {
+                if let points = points {
+                    data[symbol] = points
                 }
             }
         }
@@ -102,17 +120,12 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
         for provider in providerOrder {
             do {
                 let prices = try await getCurrentPricesFromProvider(provider, symbols: symbols)
-                logger.info(component: "MultiProviderMarketDataProvider", event: "Successfully got current prices", data: [
-                    "provider": provider.rawValue,
-                    "count": String(prices.count)
-                ])
+                if prices.isEmpty {
+                    continue
+                }
                 return prices
             } catch {
                 lastError = error
-                logger.warn(component: "MultiProviderMarketDataProvider", event: "Failed to get current prices from provider", data: [
-                    "provider": provider.rawValue,
-                    "error": error.localizedDescription
-                ])
             }
         }
 
@@ -152,6 +165,8 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
 
     private func getHistoricalDataFromProvider(_ provider: MarketDataProviderType, symbol: String, startDate: Date, endDate: Date) async throws -> [MarketDataPoint] {
         switch provider {
+        case .robinhood:
+            return try await getRobinhoodHistoricalData(symbol: symbol, startDate: startDate, endDate: endDate)
         case .coinGecko:
             return try await getCoinGeckoHistoricalData(symbol: symbol, startDate: startDate, endDate: endDate)
         case .coinMarketCap:
@@ -169,6 +184,8 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
 
     private func getCurrentPricesFromProvider(_ provider: MarketDataProviderType, symbols: [String]) async throws -> [String: Double] {
         switch provider {
+        case .robinhood:
+            return try await getRobinhoodCurrentPrices(symbols: symbols)
         case .coinGecko:
             return try await getCoinGeckoCurrentPrices(symbols: symbols)
         case .coinMarketCap:
@@ -186,6 +203,8 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
 
     private func getVolumeDataFromProvider(_ provider: MarketDataProviderType, symbols: [String]) async throws -> [String: Double] {
         switch provider {
+        case .robinhood:
+            throw MarketDataError.apiError("Robinhood volume data not supported")
         case .coinGecko:
             return try await getCoinGeckoVolumeData(symbols: symbols)
         case .coinMarketCap:
@@ -202,6 +221,123 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
     }
 
     // MARK: - CryptoCompare API Implementation
+
+    // MARK: - Robinhood Historical (daily candles, best-effort)
+
+    private func getRobinhoodHistoricalData(symbol: String, startDate: Date, endDate: Date) async throws -> [MarketDataPoint] {
+        guard let apiKey = ProcessInfo.processInfo.environment["ROBINHOOD_API_KEY"] else {
+            throw MarketDataError.apiError("ROBINHOOD_API_KEY required")
+        }
+
+        // Try a daily interval for USD pairs; fall back gracefully on any error
+        var components = URLComponents(string: "https://trading.robinhood.com/api/v1/crypto/marketdata/candles/")!
+        components.queryItems = [
+            URLQueryItem(name: "symbol", value: "\(symbol)-USD"),
+            URLQueryItem(name: "interval", value: "day")
+        ]
+
+        guard let url = components.url else {
+            throw MarketDataError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(String(Int(Date().timeIntervalSince1970)), forHTTPHeaderField: "x-timestamp")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw MarketDataError.apiError("Robinhood historical API error")
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw MarketDataError.apiError("Invalid JSON from Robinhood historical endpoint")
+        }
+
+        var points: [MarketDataPoint] = []
+        if let results = json["results"] as? [[String: Any]] {
+            for item in results {
+                guard let tsStr = item["begins_at"] as? String,
+                      let closeStr = item["close_price"] as? String,
+                      let highStr = item["high_price"] as? String,
+                      let lowStr = item["low_price"] as? String,
+                      let openStr = item["open_price"] as? String,
+                      let volumeStr = item["volume"] as? String,
+                      let close = Double(closeStr),
+                      let high = Double(highStr),
+                      let low = Double(lowStr),
+                      let open = Double(openStr),
+                      let volume = Double(volumeStr) else {
+                    continue
+                }
+
+                if let ts = ISO8601DateFormatter().date(from: tsStr) {
+                    if ts < startDate || ts > endDate { continue }
+                    let point = MarketDataPoint(
+                        timestamp: ts,
+                        price: close,
+                        volume: volume,
+                        high: high,
+                        low: low,
+                        open: open,
+                        close: close
+                    )
+                    points.append(point)
+                }
+            }
+        }
+
+        return points
+    }
+
+    // MARK: - Robinhood API Implementation (read-only quotes)
+
+    private func getRobinhoodCurrentPrices(symbols: [String]) async throws -> [String: Double] {
+        guard let apiKey = ProcessInfo.processInfo.environment["ROBINHOOD_API_KEY"] else {
+            throw MarketDataError.apiError("ROBINHOOD_API_KEY required")
+        }
+
+        var result: [String: Double] = [:]
+
+        for symbol in symbols {
+            let pair = "\(symbol)-USD"
+            var components = URLComponents(string: "https://trading.robinhood.com/api/v1/crypto/marketdata/quotes/")!
+            components.queryItems = [URLQueryItem(name: "symbol", value: pair)]
+            guard let url = components.url else { continue }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+            request.setValue(String(Int(Date().timeIntervalSince1970)), forHTTPHeaderField: "x-timestamp")
+
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { continue }
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let results = json["results"] as? [[String: Any]], let first = results.first {
+                        if let priceStr = first["last_trade_price"] as? String, let p = Double(priceStr) {
+                            result[symbol] = p
+                            continue
+                        }
+                        if let markStr = first["mark_price"] as? String, let p = Double(markStr) {
+                            result[symbol] = p
+                            continue
+                        }
+                        if let price = first["last_trade_price"] as? Double {
+                            result[symbol] = price
+                            continue
+                        }
+                    }
+                }
+            } catch {
+                // Skip symbol on error; fall through to other providers via caller
+            }
+        }
+
+        return result
+    }
 
     private func getCryptoCompareHistoricalData(symbol: String, startDate: Date, endDate: Date) async throws -> [MarketDataPoint] {
         let toTimestamp = Int(endDate.timeIntervalSince1970)
@@ -704,6 +840,9 @@ public class MultiProviderMarketDataProvider: MarketDataProviderProtocol, @unche
         let marketCaps = marketChartResponse.market_caps
 
         for i in 0..<prices.count {
+            guard i < volumes.count && i < marketCaps.count else { continue }
+            guard prices[i].count >= 2, volumes[i].count >= 2, marketCaps[i].count >= 2 else { continue }
+
             let timestamp = Date(timeIntervalSince1970: prices[i][0] / 1000)
             let price = prices[i][1]
             let volume = volumes[i][1]

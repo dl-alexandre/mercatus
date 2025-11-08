@@ -1,7 +1,7 @@
 {
     "configurations": [
         {
-            "type": "lldb",
+            "type": "swift",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -10,7 +10,7 @@
             "preLaunchTask": "swift: Build Debug ArbitrageEngine"
         },
         {
-            "type": "lldb",
+            "type": "swift",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -37,7 +37,7 @@
             "preLaunchTask": "swift: Build Release SmartVestor"
         },
         {
-            "type": "lldb",
+            "type": "swift",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -46,7 +46,7 @@
             "preLaunchTask": "swift: Build Debug SmartVestorCLI"
         },
         {
-            "type": "lldb",
+            "type": "swift",
             "request": "launch",
             "args": [],
             "cwd": "${workspaceFolder:mercatus}",
@@ -71,6 +71,24 @@
             "name": "Release ContinuousSmartVestor",
             "program": "${workspaceFolder:mercatus}/.build/release/ContinuousSmartVestor",
             "preLaunchTask": "swift: Build Release ContinuousSmartVestor"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Debug DataCleanupTool",
+            "program": "${workspaceFolder:mercatus}/.build/debug/DataCleanupTool",
+            "preLaunchTask": "swift: Build Debug DataCleanupTool"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mercatus}",
+            "name": "Release DataCleanupTool",
+            "program": "${workspaceFolder:mercatus}/.build/release/DataCleanupTool",
+            "preLaunchTask": "swift: Build Release DataCleanupTool"
         }
     ]
 }

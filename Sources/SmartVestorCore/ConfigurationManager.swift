@@ -1,16 +1,49 @@
 import Foundation
 import Security
+import Utils
 
 public class SmartVestorConfigurationManager {
     private let config: SmartVestorConfig
     private let keychain = KeychainManager()
 
     public init(configPath: String? = nil) throws {
+        let loadedConfig: SmartVestorConfig
+
         if let path = configPath {
-            self.config = try Self.loadConfig(from: path)
+            loadedConfig = try Self.loadConfig(from: path)
         } else {
-            self.config = try Self.loadConfigFromEnvironment()
+            let defaultPaths = [
+                "config/smartvestor_config.json",
+                "smartvestor_config.json",
+                "./config/smartvestor_config.json"
+            ]
+
+            var loaded = false
+            var tempConfig: SmartVestorConfig?
+
+            for defaultPath in defaultPaths {
+                if FileManager.default.fileExists(atPath: defaultPath) {
+                    do {
+                        tempConfig = try Self.loadConfig(from: defaultPath)
+                        loaded = true
+                        break
+                    } catch {
+                        continue
+                    }
+                }
+            }
+
+            if loaded, let config = tempConfig {
+                loadedConfig = config
+            } else {
+                loadedConfig = try Self.loadConfigFromEnvironment()
+            }
         }
+
+        if let tigerBeetle = loadedConfig.tigerbeetle {
+            try tigerBeetle.validate()
+        }
+        self.config = loadedConfig
     }
 
     public var currentConfig: SmartVestorConfig {
@@ -23,6 +56,41 @@ public class SmartVestorConfigurationManager {
 
     public func storeExchangeCredentials(_ credentials: ExchangeCredentials, for exchange: String) throws {
         try keychain.storeCredentials(credentials, for: exchange)
+    }
+
+    public func createPersistence(
+        dbPath: String = "smartvestor.db",
+        logger: StructuredLogger = StructuredLogger(),
+        validateColdStart: Bool = false
+    ) throws -> PersistenceProtocol {
+        let sqlitePersistence = SQLitePersistence(dbPath: dbPath)
+
+        guard let tigerBeetleConfig = config.tigerbeetle,
+              tigerBeetleConfig.enabled else {
+            return sqlitePersistence
+        }
+
+        try ClockSanityChecker.validateClock()
+
+        let client = InMemoryTigerBeetleClient()
+        let tigerBeetlePersistence = TigerBeetlePersistence(client: client, logger: logger)
+
+        if validateColdStart {
+            let validator = ColdStartValidator(
+                sqlitePersistence: sqlitePersistence,
+                tigerBeetlePersistence: tigerBeetlePersistence,
+                logger: logger
+            )
+            _ = try validator.validateColdStart()
+        }
+
+        return HybridPersistence(
+            sqlitePersistence: sqlitePersistence,
+            tigerBeetlePersistence: tigerBeetlePersistence,
+            useTigerBeetleForTransactions: tigerBeetleConfig.useTigerBeetleForTransactions,
+            useTigerBeetleForBalances: tigerBeetleConfig.useTigerBeetleForBalances,
+            logger: logger
+        )
     }
 
     private static func loadConfig(from path: String) throws -> SmartVestorConfig {
@@ -50,6 +118,9 @@ public class SmartVestorConfigurationManager {
         let staking = loadStakingConfig()
         let simulation = loadSimulationConfig()
 
+        let swapAnalysis = loadSwapAnalysisConfig()
+        let tigerbeetle = loadTigerBeetleConfig()
+
         return SmartVestorConfig(
             baseAllocation: baseAllocation,
             volatilityThreshold: volatilityThreshold,
@@ -62,7 +133,9 @@ public class SmartVestorConfigurationManager {
             movingAveragePeriod: movingAveragePeriod,
             exchanges: exchanges,
             staking: staking,
-            simulation: simulation
+            simulation: simulation,
+            swapAnalysis: swapAnalysis,
+            tigerbeetle: tigerbeetle
         )
     }
 
@@ -104,8 +177,57 @@ public class SmartVestorConfigurationManager {
         )
     }
 
+    private static func loadSwapAnalysisConfig() -> SwapAnalysisConfig {
+        let enabled = ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_ANALYSIS_ENABLED"]?.lowercased() == "true"
+        let minProfitThreshold = Double(ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_MIN_PROFIT_THRESHOLD"] ?? "1.0") ?? 1.0
+        let minProfitPercentage = Double(ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_MIN_PROFIT_PERCENTAGE"] ?? "0.005") ?? 0.005
+        let safetyMultiplier = Double(ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_SAFETY_MULTIPLIER"] ?? "1.2") ?? 1.2
+        let maxCostPercentage = Double(ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_MAX_COST_PERCENTAGE"] ?? "0.02") ?? 0.02
+        let minConfidence = Double(ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_MIN_CONFIDENCE"] ?? "0.6") ?? 0.6
+        let enableAutoSwaps = ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_AUTO_ENABLED"]?.lowercased() == "true"
+        let maxSwapsPerCycle = Int(ProcessInfo.processInfo.environment["SMARTVESTOR_SWAP_MAX_PER_CYCLE"] ?? "3") ?? 3
+
+        return SwapAnalysisConfig(
+            enabled: enabled,
+            minProfitThreshold: minProfitThreshold,
+            minProfitPercentage: minProfitPercentage,
+            safetyMultiplier: safetyMultiplier,
+            maxCostPercentage: maxCostPercentage,
+            minConfidence: minConfidence,
+            enableAutoSwaps: enableAutoSwaps,
+            maxSwapsPerCycle: maxSwapsPerCycle
+        )
+    }
+
+    private static func loadTigerBeetleConfig() -> TigerBeetleConfig? {
+        let enabled = ProcessInfo.processInfo.environment["TIGERBEETLE_ENABLED"]?.lowercased() == "true"
+        guard enabled || ProcessInfo.processInfo.environment["TIGERBEETLE_CLUSTER_ID"] != nil else {
+            return nil
+        }
+
+        let clusterId = UInt32(ProcessInfo.processInfo.environment["TIGERBEETLE_CLUSTER_ID"] ?? "0") ?? 0
+        let replicaAddresses = ProcessInfo.processInfo.environment["TIGERBEETLE_REPLICA_ADDRESSES"]?
+            .components(separatedBy: ",") ?? ["127.0.0.1:3001"]
+        let useForTransactions = ProcessInfo.processInfo.environment["TIGERBEETLE_USE_FOR_TRANSACTIONS"]?.lowercased() != "false"
+        let useForBalances = ProcessInfo.processInfo.environment["TIGERBEETLE_USE_FOR_BALANCES"]?.lowercased() != "false"
+
+        return TigerBeetleConfig(
+            enabled: enabled,
+            clusterId: clusterId,
+            replicaAddresses: replicaAddresses,
+            useTigerBeetleForTransactions: useForTransactions,
+            useTigerBeetleForBalances: useForBalances
+        )
+    }
+
     private static func loadSimulationConfig() -> SimulationConfig {
-        let enabled = ProcessInfo.processInfo.environment["SMARTVESTOR_SIMULATION_ENABLED"]?.lowercased() == "true"
+        // Check for production mode override first
+        let productionMode = ProcessInfo.processInfo.environment["SMARTVESTOR_PRODUCTION_MODE"]?.lowercased() == "true"
+        let simulationEnabled = ProcessInfo.processInfo.environment["SMARTVESTOR_SIMULATION_ENABLED"]?.lowercased() == "true"
+
+        // If production mode is set, disable simulation
+        let enabled = productionMode ? false : simulationEnabled
+
         let historicalDataPath = ProcessInfo.processInfo.environment["SMARTVESTOR_HISTORICAL_DATA_PATH"]
 
         let startDate: Date?

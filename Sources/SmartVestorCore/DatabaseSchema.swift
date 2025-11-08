@@ -141,10 +141,15 @@ public class SQLitePersistence: PersistenceProtocol {
         }
 
         sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nil, nil, nil)
-        // Enable WAL mode for better concurrency, but disable in tests to avoid issues
+
         if ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] == nil {
             sqlite3_exec(db, "PRAGMA journal_mode = WAL;", nil, nil, nil)
         }
+
+        sqlite3_exec(db, "PRAGMA synchronous = NORMAL;", nil, nil, nil)
+        sqlite3_exec(db, "PRAGMA temp_store = MEMORY;", nil, nil, nil)
+        sqlite3_exec(db, "PRAGMA cache_size = -8000;", nil, nil, nil)
+        sqlite3_exec(db, "PRAGMA mmap_size = 134217728;", nil, nil, nil)
     }
 
     public func close() {
@@ -342,6 +347,8 @@ public class SQLitePersistence: PersistenceProtocol {
     }
 
     public func getTransactions(exchange: String? = nil, asset: String? = nil, type: TransactionType? = nil, limit: Int? = nil) throws -> [InvestmentTransaction] {
+        // Cap at 100 rows max, use smaller default to prevent memory issues
+        let maxLimit = min(limit ?? 50, 100)
         var query = """
             SELECT id, type, exchange, asset, qty, price, fee, ts, meta_json, idempotency_key
             FROM tx
@@ -366,12 +373,9 @@ public class SQLitePersistence: PersistenceProtocol {
             query += " WHERE " + conditions.joined(separator: " AND ")
         }
 
-        query += " ORDER BY ts DESC"
-
-        if let limit = limit {
-            query += " LIMIT ?"
-            parameters.append(limit)
-        }
+        // Use index hint if possible - ORDER BY with indexed column should use idx_tx_ts
+        query += " ORDER BY ts DESC LIMIT ?"
+        parameters.append(maxLimit)
 
         return try queryRows(query, parameters: parameters) { row in
             let metadataData = sqlite3_column_text(row, 8)
@@ -721,12 +725,29 @@ public class SQLitePersistence: PersistenceProtocol {
         return try rowMapper(statement!)
     }
 
+    private func getTableRowCount(_ tableName: String) throws -> Int {
+        let query = "SELECT COUNT(*) FROM \(tableName);"
+        return try querySingleRow(query, parameters: []) { row in
+            return Int(sqlite3_column_int64(row, 0))
+        } ?? 0
+    }
+
     private func queryRows<T>(_ sql: String, parameters: [Any] = [], _ rowMapper: (OpaquePointer) throws -> T) throws -> [T] {
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
 
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            throw SmartVestorError.persistenceError("Failed to prepare statement: \(String(cString: sqlite3_errmsg(db)))")
+        let prepareResult = sqlite3_prepare_v2(db, sql, -1, &statement, nil)
+        guard prepareResult == SQLITE_OK else {
+            let errorMsg = String(cString: sqlite3_errmsg(db))
+            let errorCode = sqlite3_extended_errcode(db)
+
+            if prepareResult == SQLITE_NOMEM || errorCode == SQLITE_NOMEM {
+                let tableCount = try? getTableRowCount("tx")
+                let errorDetails = tableCount.map { " (table has ~\($0) rows)" } ?? ""
+                throw SmartVestorError.persistenceError("Failed to prepare statement: out of memory\(errorDetails). Try reducing the query limit or cleaning up old transactions.")
+            }
+
+            throw SmartVestorError.persistenceError("Failed to prepare statement: \(errorMsg) (code: \(errorCode))")
         }
 
         let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

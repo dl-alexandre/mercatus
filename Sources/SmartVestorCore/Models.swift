@@ -1,4 +1,5 @@
 import Foundation
+import ArgumentParser
 
 public struct SmartVestorConfig: Codable {
     public let allocationMode: AllocationMode
@@ -17,6 +18,8 @@ public struct SmartVestorConfig: Codable {
     public let scoreBasedAllocation: ScoreBasedAllocationConfig?
     public let maxPortfolioRisk: Double?
     public let marketDataProvider: MarketDataProviderConfig?
+    public let swapAnalysis: SwapAnalysisConfig?
+    public let tigerbeetle: TigerBeetleConfig?
 
     public init(
         allocationMode: AllocationMode = .anchorBased,
@@ -34,7 +37,9 @@ public struct SmartVestorConfig: Codable {
         simulation: SimulationConfig = SimulationConfig(),
         scoreBasedAllocation: ScoreBasedAllocationConfig? = nil,
         maxPortfolioRisk: Double? = nil,
-        marketDataProvider: MarketDataProviderConfig? = nil
+        marketDataProvider: MarketDataProviderConfig? = nil,
+        swapAnalysis: SwapAnalysisConfig? = nil,
+        tigerbeetle: TigerBeetleConfig? = nil
     ) {
         self.allocationMode = allocationMode
         self.baseAllocation = baseAllocation
@@ -52,6 +57,61 @@ public struct SmartVestorConfig: Codable {
         self.scoreBasedAllocation = scoreBasedAllocation
         self.maxPortfolioRisk = maxPortfolioRisk
         self.marketDataProvider = marketDataProvider
+        self.swapAnalysis = swapAnalysis
+        self.tigerbeetle = tigerbeetle
+    }
+}
+
+public struct TigerBeetleConfig: Codable {
+    public let enabled: Bool
+    public let clusterId: UInt32
+    public let replicaAddresses: [String]
+    public let useTigerBeetleForTransactions: Bool
+    public let useTigerBeetleForBalances: Bool
+    public let liveToggleEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case clusterId
+        case replicaAddresses
+        case useTigerBeetleForTransactions
+        case useTigerBeetleForBalances
+        case liveToggleEnabled
+    }
+
+    public init(
+        enabled: Bool = false,
+        clusterId: UInt32 = 0,
+        replicaAddresses: [String] = ["127.0.0.1:3001"],
+        useTigerBeetleForTransactions: Bool = true,
+        useTigerBeetleForBalances: Bool = true,
+        liveToggleEnabled: Bool = true
+    ) {
+        self.enabled = enabled
+        self.clusterId = clusterId
+        self.replicaAddresses = replicaAddresses
+        self.useTigerBeetleForTransactions = useTigerBeetleForTransactions
+        self.useTigerBeetleForBalances = useTigerBeetleForBalances
+        self.liveToggleEnabled = liveToggleEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        clusterId = try container.decode(UInt32.self, forKey: .clusterId)
+        replicaAddresses = try container.decode([String].self, forKey: .replicaAddresses)
+        useTigerBeetleForTransactions = try container.decode(Bool.self, forKey: .useTigerBeetleForTransactions)
+        useTigerBeetleForBalances = try container.decode(Bool.self, forKey: .useTigerBeetleForBalances)
+        liveToggleEnabled = try container.decodeIfPresent(Bool.self, forKey: .liveToggleEnabled) ?? true
+    }
+
+    public func validate() throws {
+        if enabled && replicaAddresses.isEmpty {
+            throw SmartVestorError.configurationError("TigerBeetle enabled but replicaAddresses is empty")
+        }
+        if enabled && clusterId == 0 && !replicaAddresses.isEmpty {
+            throw SmartVestorError.configurationError("TigerBeetle clusterId must be non-zero when enabled")
+        }
     }
 }
 
@@ -482,6 +542,15 @@ public struct ExchangeSpread: Codable {
     }
 }
 
+public enum AutomationMode: String, CaseIterable, ExpressibleByArgument, Codable, Sendable {
+    case continuous = "continuous"
+    case weekly = "weekly"
+
+    public init?(argument: String) {
+        self.init(rawValue: argument.lowercased())
+    }
+}
+
 public enum AllocationMode: String, Codable, CaseIterable {
     case anchorBased = "anchor_based"
     case scoreBased = "score_based"
@@ -587,5 +656,135 @@ public struct ExecutionResult: Codable {
         self.error = error
         self.timestamp = timestamp
         self.orderId = orderId
+    }
+}
+
+public struct SwapCost: Codable {
+    public let sellFee: Double
+    public let buyFee: Double
+    public let sellSpread: Double
+    public let buySpread: Double
+    public let sellSlippage: Double
+    public let buySlippage: Double
+    public let totalCostUSD: Double
+    public let costPercentage: Double
+
+    public init(
+        sellFee: Double,
+        buyFee: Double,
+        sellSpread: Double,
+        buySpread: Double,
+        sellSlippage: Double,
+        buySlippage: Double,
+        totalCostUSD: Double,
+        costPercentage: Double
+    ) {
+        self.sellFee = sellFee
+        self.buyFee = buyFee
+        self.sellSpread = sellSpread
+        self.buySpread = buySpread
+        self.sellSlippage = sellSlippage
+        self.buySlippage = buySlippage
+        self.totalCostUSD = totalCostUSD
+        self.costPercentage = costPercentage
+    }
+}
+
+public struct SwapBenefit: Codable {
+    public let expectedReturnDifferential: Double
+    public let portfolioImprovement: Double
+    public let riskReduction: Double?
+    public let allocationAlignment: Double
+    public let totalBenefitUSD: Double
+    public let benefitPercentage: Double
+
+    public init(
+        expectedReturnDifferential: Double,
+        portfolioImprovement: Double,
+        riskReduction: Double?,
+        allocationAlignment: Double,
+        totalBenefitUSD: Double,
+        benefitPercentage: Double
+    ) {
+        self.expectedReturnDifferential = expectedReturnDifferential
+        self.portfolioImprovement = portfolioImprovement
+        self.riskReduction = riskReduction
+        self.allocationAlignment = allocationAlignment
+        self.totalBenefitUSD = totalBenefitUSD
+        self.benefitPercentage = benefitPercentage
+    }
+}
+
+public struct SwapEvaluation: Codable, Identifiable, @unchecked Sendable {
+    public let id: UUID
+    public let fromAsset: String
+    public let toAsset: String
+    public let fromQuantity: Double
+    public let estimatedToQuantity: Double
+    public let totalCost: SwapCost
+    public let potentialBenefit: SwapBenefit
+    public let netValue: Double
+    public let isWorthwhile: Bool
+    public let confidence: Double
+    public let exchange: String
+    public let timestamp: Date
+
+    public init(
+        id: UUID = UUID(),
+        fromAsset: String,
+        toAsset: String,
+        fromQuantity: Double,
+        estimatedToQuantity: Double,
+        totalCost: SwapCost,
+        potentialBenefit: SwapBenefit,
+        netValue: Double,
+        isWorthwhile: Bool,
+        confidence: Double,
+        exchange: String,
+        timestamp: Date = Date()
+    ) {
+        self.id = id
+        self.fromAsset = fromAsset
+        self.toAsset = toAsset
+        self.fromQuantity = fromQuantity
+        self.estimatedToQuantity = estimatedToQuantity
+        self.totalCost = totalCost
+        self.potentialBenefit = potentialBenefit
+        self.netValue = netValue
+        self.isWorthwhile = isWorthwhile
+        self.confidence = confidence
+        self.exchange = exchange
+        self.timestamp = timestamp
+    }
+}
+
+public struct SwapAnalysisConfig: Codable {
+    public let enabled: Bool
+    public let minProfitThreshold: Double
+    public let minProfitPercentage: Double
+    public let safetyMultiplier: Double
+    public let maxCostPercentage: Double
+    public let minConfidence: Double
+    public let enableAutoSwaps: Bool
+    public let maxSwapsPerCycle: Int
+
+    public init(
+        enabled: Bool = true,
+        minProfitThreshold: Double = 1.0,
+        minProfitPercentage: Double = 0.005,
+        safetyMultiplier: Double = 1.2,
+        maxCostPercentage: Double = 0.02,
+        minConfidence: Double = 0.6,
+        enableAutoSwaps: Bool = false,
+        maxSwapsPerCycle: Int = 3
+    ) {
+        self.enabled = enabled
+        self.minProfitThreshold = minProfitThreshold
+        self.minProfitPercentage = minProfitPercentage
+        self.safetyMultiplier = safetyMultiplier
+        self.maxCostPercentage = maxCostPercentage
+        self.minConfidence = minConfidence
+        self.enableAutoSwaps = enableAutoSwaps
+        self.maxSwapsPerCycle = maxSwapsPerCycle
     }
 }

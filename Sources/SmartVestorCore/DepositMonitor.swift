@@ -98,6 +98,13 @@ public class DepositMonitor: DepositMonitorProtocol {
         var allDeposits: [DepositDetection] = []
 
         for exchangeConfig in config.exchanges where exchangeConfig.enabled {
+            guard exchangeConnectors[exchangeConfig.name] != nil else {
+                logger.warn(component: "DepositMonitor", event: "Skipping exchange - no connector available", data: [
+                    "exchange": exchangeConfig.name
+                ])
+                continue
+            }
+
             do {
                 let deposits = try await scanExchangeForDeposits(exchangeConfig)
                 allDeposits.append(contentsOf: deposits)
@@ -107,11 +114,10 @@ public class DepositMonitor: DepositMonitorProtocol {
                     "count": String(deposits.count)
                 ])
             } catch {
-                logger.error(component: "DepositMonitor", event: "Failed to scan exchange for deposits", data: [
+                logger.warn(component: "DepositMonitor", event: "Failed to scan exchange for deposits", data: [
                     "exchange": exchangeConfig.name,
                     "error": error.localizedDescription
                 ])
-                throw SmartVestorError.exchangeError("Failed to scan \(exchangeConfig.name): \(error.localizedDescription)")
             }
         }
 

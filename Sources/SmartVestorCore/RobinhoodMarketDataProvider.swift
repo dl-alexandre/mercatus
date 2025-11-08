@@ -36,22 +36,10 @@ public class RobinhoodMarketDataProvider: RobinhoodMarketDataProviderProtocol, @
         try await rateLimiter.waitIfNeeded()
 
         logger.debug(component: "RobinhoodMarketDataProvider", event: "Fetching latest price", data: ["symbol": symbol])
-
-        let holdings = try await holdingsProvider.getHoldings()
-
-        guard let holdingsForSymbol = holdings.first(where: { $0["asset"] as? String == symbol }) else {
-            throw MarketDataError.unsupportedSymbol(symbol)
-        }
-
-        guard let quantity = Double(holdingsForSymbol["quantity"] as? String ?? "0") else {
-            throw MarketDataError.apiError("Invalid quantity for \(symbol)")
-        }
-
-        if quantity == 0 {
-            return 100.0
-        }
-
-        return 100.0
+        let provider = MultiProviderMarketDataProvider()
+        let prices = try await provider.getCurrentPrices(symbols: [symbol])
+        if let price = prices[symbol], price > 0 { return price }
+        throw MarketDataError.apiError("Price not available for \(symbol)")
     }
 
     public func fetchOHLCVData(symbol: String, startDate: Date, endDate: Date) async throws -> [RobinhoodMarketData] {
@@ -85,7 +73,7 @@ public class RobinhoodMarketDataProvider: RobinhoodMarketDataProviderProtocol, @
         var dataPoints: [RobinhoodMarketData] = []
         var currentPrice = 100.0
 
-        for i in 0..<numberOfPoints {
+        for _ in 0..<numberOfPoints {
             currentPrice *= (1.0 + Double.random(in: -0.02...0.02))
 
             let volume = Double.random(in: 100000...1000000)

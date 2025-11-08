@@ -70,7 +70,7 @@ public final class TimeSeriesStore: TimeSeriesStoreProtocol {
     }
 }
 
-public protocol DatabaseProtocol {
+public protocol DatabaseProtocol: Sendable {
     func insertMarketData(_ dataPoints: [MarketDataPoint]) async throws
     func getMarketData(symbol: String, from: Date, to: Date) async throws -> [MarketDataPoint]
     func getLatestMarketData(symbol: String, limit: Int) async throws -> [MarketDataPoint]

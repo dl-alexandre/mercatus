@@ -10,6 +10,10 @@ public final class StructuredLogger {
     }
 
     private let enabled: Bool
+    private let logFilePath: String?
+    private let alsoPrintToStderr: Bool
+    private var fileHandle: FileHandle?
+    private var fileWriteFailed = false
 
     private struct LogEnvelope: Encodable {
         let schemaVersion: String
@@ -25,6 +29,7 @@ public final class StructuredLogger {
     private let encoder: JSONEncoder
     private let timestampFormatter: ISO8601DateFormatter
     private let queue: DispatchQueue
+    private let queueKey = DispatchSpecificKey<String>()
     private let clock: @Sendable () -> Date
     private var logTimestamps: [TimeInterval] = []
     private let maxLogsPerMinute: Int
@@ -34,10 +39,17 @@ public final class StructuredLogger {
     private let lock = NSLock()
     private let dropWarningInterval: TimeInterval = 60
 
-    public init(maxLogsPerMinute: Int = 1000, clock: @escaping @Sendable () -> Date = Date.init, enabled: Bool = true) {
+    public init(
+        maxLogsPerMinute: Int = 1000,
+        clock: @escaping @Sendable () -> Date = Date.init,
+        enabled: Bool = true,
+        logFilePath: String? = nil,
+        alsoPrintToStderr: Bool = false
+    ) {
         self.maxLogsPerMinute = max(1, maxLogsPerMinute)
         self.clock = clock
         self.enabled = enabled
+        self.alsoPrintToStderr = alsoPrintToStderr
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = []
@@ -48,6 +60,10 @@ public final class StructuredLogger {
         self.timestampFormatter = formatter
 
         self.queue = DispatchQueue(label: "com.mercatus.logger", qos: .utility)
+        queue.setSpecific(key: queueKey, value: "com.mercatus.logger")
+
+        let resolvedPath = StructuredLogger.resolveLogFilePath(preferredPath: logFilePath)
+        self.logFilePath = resolvedPath
 
         signal(SIGPIPE, SIG_IGN)
     }
@@ -215,10 +231,21 @@ public final class StructuredLogger {
     }
 
     private func writeToStdout(_ data: Data) {
-        data.withUnsafeBytes { buffer in
-            guard let baseAddress = buffer.baseAddress else { return }
-            _ = write(STDERR_FILENO, baseAddress, buffer.count)
+        if let path = logFilePath, !fileWriteFailed {
+            do {
+                try writeToFile(path: path, data: data)
+                if alsoPrintToStderr {
+                    fallbackWriteToStderr(data)
+                }
+                return
+            } catch {
+                fileWriteFailed = true
+                fallbackWriteToStderr(data)
+                return
+            }
         }
+
+        fallbackWriteToStderr(data)
     }
 
     private func writeFallbackEncodingError(component: String, event: String, error: Swift.Error) {
@@ -236,6 +263,98 @@ public final class StructuredLogger {
         guard var payload = try? encoder.encode(fallback) else { return }
         payload.append(0x0A)
         writeToStdout(payload)
+    }
+
+    private func writeToFile(path: String, data: Data) throws {
+        let expandedPath = StructuredLogger.expandPath(path)
+        if fileHandle == nil {
+            fileHandle = try createFileHandle(at: expandedPath)
+        }
+
+        guard let handle = fileHandle else {
+            throw NSError(domain: "StructuredLogger", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create log file handle"])
+        }
+
+        try handle.write(contentsOf: data)
+        if #available(macOS 10.15.4, *) {
+            try handle.synchronize()
+        } else {
+            handle.synchronizeFile()
+        }
+    }
+
+    private func createFileHandle(at path: String) throws -> FileHandle {
+        let url = URL(fileURLWithPath: path)
+        let directory = url.deletingLastPathComponent()
+        let fileManager = FileManager.default
+
+        if !fileManager.fileExists(atPath: directory.path) {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+
+        if !fileManager.fileExists(atPath: path) {
+            fileManager.createFile(atPath: path, contents: nil)
+        }
+
+        let handle = try FileHandle(forWritingTo: url)
+        if #available(macOS 10.15, *) {
+            try handle.seekToEnd()
+        } else {
+            handle.seekToEndOfFile()
+        }
+        return handle
+    }
+
+    private func fallbackWriteToStderr(_ data: Data) {
+        data.withUnsafeBytes { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            _ = write(STDERR_FILENO, baseAddress, buffer.count)
+            fflush(stderr)
+        }
+    }
+
+    private static func resolveLogFilePath(preferredPath: String?) -> String? {
+        let trimmedPreferred = preferredPath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedPreferred, !trimmedPreferred.isEmpty {
+            return expandPath(trimmedPreferred)
+        }
+
+        if let envPath = ProcessInfo.processInfo.environment["SMARTVESTOR_LOG_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !envPath.isEmpty {
+            return expandPath(envPath)
+        }
+
+        return nil
+    }
+
+    private static func expandPath(_ path: String) -> String {
+        if path.hasPrefix("~") {
+            return NSString(string: path).expandingTildeInPath
+        }
+        return path
+    }
+
+    deinit {
+        let handle = fileHandle
+        fileHandle = nil
+
+        if let handle = handle {
+            if DispatchQueue.getSpecific(key: queueKey) != nil {
+                if #available(macOS 10.15.4, *) {
+                    try? handle.close()
+                } else {
+                    handle.closeFile()
+                }
+            } else {
+                queue.async {
+                    if #available(macOS 10.15.4, *) {
+                        try? handle.close()
+                    } else {
+                        handle.closeFile()
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -209,12 +209,12 @@ public actor TriangularArbitrageDetector {
         }
 
         // Check for triangular opportunities on this exchange in parallel
-        Task {
-            checkTriangularOpportunities(for: quote.exchange)
+        Task { [exchange = quote.exchange] in
+            await checkTriangularOpportunities(for: exchange)
         }
     }
 
-    private func checkTriangularOpportunities(for exchange: String) {
+    private func checkTriangularOpportunities(for exchange: String) async {
         guard let quotes = exchangeQuotes[exchange] else { return }
 
         // Debug: Log available pairs for this exchange
@@ -230,24 +230,23 @@ public actor TriangularArbitrageDetector {
         )
 
         // Process triangular paths in parallel using TaskGroup
-        Task {
-            await withTaskGroup(of: TriangularOpportunity?.self) { group in
-                for path in triangularPaths {
-                    group.addTask {
-                        await self.checkSingleTriangularPath(
-                            exchange: exchange,
-                            path: path,
-                            quotes: quotes
-                        )
-                    }
+        await withTaskGroup(of: TriangularOpportunity?.self) { group in
+            for path in triangularPaths {
+                group.addTask {
+                    await self.checkSingleTriangularPath(
+                        exchange: exchange,
+                        path: path,
+                        quotes: quotes
+                    )
                 }
+            }
 
-                // Collect results and broadcast profitable opportunities
-                for await opportunity in group {
-                    if let opportunity = opportunity, opportunity.isProfitable {
-                        self.logOpportunity(opportunity)
-                        self.broadcast(opportunity)
-                    }
+            // Collect results and broadcast profitable opportunities
+            for await opportunity in group {
+                guard !Task.isCancelled else { break }
+                if let opportunity = opportunity, opportunity.isProfitable {
+                    await self.logOpportunity(opportunity)
+                    await self.broadcast(opportunity)
                 }
             }
         }
@@ -359,9 +358,10 @@ public actor TriangularArbitrageDetector {
         )
     }
 
-    private func broadcast(_ opportunity: TriangularOpportunity) {
+    private func broadcast(_ opportunity: TriangularOpportunity) async {
         var terminated: [UUID] = []
         for (id, continuation) in listeners {
+            guard !Task.isCancelled else { break }
             let result = continuation.yield(opportunity)
             if case .terminated = result {
                 terminated.append(id)
@@ -375,7 +375,7 @@ public actor TriangularArbitrageDetector {
         }
     }
 
-    private func logOpportunity(_ opportunity: TriangularOpportunity) {
+    private func logOpportunity(_ opportunity: TriangularOpportunity) async {
         logger?.info(
             component: componentName,
             event: "triangular_opportunity",

@@ -3,7 +3,7 @@ import Utils
 
 /// Lightweight in-memory database that mirrors the behaviour required by `DatabaseProtocol`.
 /// Useful for unit tests that do not need persistence guarantees or SQLite semantics.
-public final class MockDatabase: DatabaseProtocol {
+public final class MockDatabase: DatabaseProtocol, @unchecked Sendable {
     private var marketData: [MarketDataPoint] = []
     private var archivedData: [MarketDataPoint] = []
     private let logger: StructuredLogger

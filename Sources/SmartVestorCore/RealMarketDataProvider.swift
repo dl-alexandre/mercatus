@@ -104,6 +104,8 @@ public class RealMarketDataProvider: MarketDataProviderProtocol {
         let marketCaps = coinGeckoResponse.market_caps
 
         for i in 0..<min(prices.count, volumes.count, marketCaps.count) {
+            guard prices[i].count >= 2, volumes[i].count >= 2, marketCaps[i].count >= 2 else { continue }
+
             let timestamp = Date(timeIntervalSince1970: prices[i][0] / 1000)
             let price = prices[i][1]
             let volume = volumes[i][1]

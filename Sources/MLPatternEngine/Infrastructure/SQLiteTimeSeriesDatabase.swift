@@ -116,31 +116,36 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
     public func insertMarketData(_ dataPoints: [MarketDataPoint]) async throws {
         guard !dataPoints.isEmpty else { return }
 
-        try withTransaction {
-            let sql = """
-            INSERT INTO market_data(symbol, exchange, timestamp, open, high, low, close, volume)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?);
-            """
+        let batchSize = 100
+        let batches = dataPoints.chunked(into: batchSize)
 
-            let statement = try prepareStatement(sql: sql)
-            defer { sqlite3_finalize(statement) }
+        for batch in batches {
+            try withTransaction {
+                let sql = """
+                INSERT OR REPLACE INTO market_data(symbol, exchange, timestamp, open, high, low, close, volume)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?);
+                """
 
-            for point in dataPoints {
-                sqlite3_reset(statement)
-                sqlite3_clear_bindings(statement)
+                let statement = try prepareStatement(sql: sql)
+                defer { sqlite3_finalize(statement) }
 
-                try bindText(point.symbol, to: statement, index: 1)
-                try bindText(point.exchange, to: statement, index: 2)
-                sqlite3_bind_double(statement, 3, point.timestamp.timeIntervalSince1970)
-                sqlite3_bind_double(statement, 4, point.open)
-                sqlite3_bind_double(statement, 5, point.high)
-                sqlite3_bind_double(statement, 6, point.low)
-                sqlite3_bind_double(statement, 7, point.close)
-                sqlite3_bind_double(statement, 8, point.volume)
+                for point in batch {
+                    sqlite3_reset(statement)
+                    sqlite3_clear_bindings(statement)
 
-                let stepResult = sqlite3_step(statement)
-                guard stepResult == SQLITE_DONE else {
-                    throw SQLiteDatabaseError.step(stepResult, currentErrorMessage())
+                    try bindText(point.symbol, to: statement, index: 1)
+                    try bindText(point.exchange, to: statement, index: 2)
+                    sqlite3_bind_double(statement, 3, point.timestamp.timeIntervalSince1970)
+                    sqlite3_bind_double(statement, 4, point.open)
+                    sqlite3_bind_double(statement, 5, point.high)
+                    sqlite3_bind_double(statement, 6, point.low)
+                    sqlite3_bind_double(statement, 7, point.close)
+                    sqlite3_bind_double(statement, 8, point.volume)
+
+                    let stepResult = sqlite3_step(statement)
+                    guard stepResult == SQLITE_DONE else {
+                        throw SQLiteDatabaseError.step(stepResult, currentErrorMessage())
+                    }
                 }
             }
         }
@@ -195,6 +200,39 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
         var results: [MarketDataPoint] = []
         while sqlite3_step(statement) == SQLITE_ROW {
             results.append(mapMarketDataPoint(statement: statement))
+        }
+
+        return results
+    }
+
+    public func getMarketDataBatch(symbols: [String], from: Date, to: Date) async throws -> [String: [MarketDataPoint]] {
+        guard !symbols.isEmpty else { return [:] }
+
+        let placeholders = symbols.map { _ in "?" }.joined(separator: ",")
+        let sql = """
+        SELECT symbol, exchange, timestamp, open, high, low, close, volume
+        FROM market_data
+        WHERE symbol IN (\(placeholders)) AND timestamp BETWEEN ? AND ?
+        ORDER BY symbol, timestamp ASC;
+        """
+
+        let statement = try prepareStatement(sql: sql)
+        defer { sqlite3_finalize(statement) }
+
+        for (index, symbol) in symbols.enumerated() {
+            try bindText(symbol, to: statement, index: Int32(index + 1))
+        }
+        sqlite3_bind_double(statement, Int32(symbols.count + 1), from.timeIntervalSince1970)
+        sqlite3_bind_double(statement, Int32(symbols.count + 2), to.timeIntervalSince1970)
+
+        var results: [String: [MarketDataPoint]] = [:]
+        for symbol in symbols {
+            results[symbol] = []
+        }
+
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let point = mapMarketDataPoint(statement: statement)
+            results[point.symbol, default: []].append(point)
         }
 
         return results
@@ -335,13 +373,20 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
             high REAL NOT NULL,
             low REAL NOT NULL,
             close REAL NOT NULL,
-            volume REAL NOT NULL
+            volume REAL NOT NULL,
+            created_at REAL NOT NULL DEFAULT (strftime('%s', 'now')),
+            UNIQUE(symbol, timestamp)
         );
         """
 
         let createMarketIndexSQL = """
         CREATE INDEX IF NOT EXISTS idx_market_data_symbol_time
         ON market_data(symbol, timestamp);
+        """
+
+        let createMarketTimestampDescIndexSQL = """
+        CREATE INDEX IF NOT EXISTS idx_market_data_timestamp_desc
+        ON market_data(timestamp DESC);
         """
 
         let createArchiveSQL = """
@@ -392,6 +437,7 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
 
         try execute(sql: createMarketDataSQL)
         try execute(sql: createMarketIndexSQL)
+        try execute(sql: createMarketTimestampDescIndexSQL)
         try execute(sql: createArchiveSQL)
         try execute(sql: createDetectedPatternsSQL)
         try execute(sql: createPatternIndexSQL)
@@ -417,6 +463,11 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
         let createMarketIndexSQL = """
         CREATE INDEX IF NOT EXISTS idx_market_data_symbol_time
         ON market_data(symbol, timestamp);
+        """
+
+        let createMarketTimestampDescIndexSQL = """
+        CREATE INDEX IF NOT EXISTS idx_market_data_timestamp_desc
+        ON market_data(timestamp DESC);
         """
 
         let createArchiveSQL = """
@@ -467,6 +518,7 @@ public actor SQLiteTimeSeriesDatabase: DatabaseProtocol {
 
         try executeSync(db: db, sql: createMarketDataSQL)
         try executeSync(db: db, sql: createMarketIndexSQL)
+        try executeSync(db: db, sql: createMarketTimestampDescIndexSQL)
         try executeSync(db: db, sql: createArchiveSQL)
         try executeSync(db: db, sql: createDetectedPatternsSQL)
         try executeSync(db: db, sql: createPatternIndexSQL)

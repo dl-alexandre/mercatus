@@ -40,7 +40,7 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
             return Array(cachedScores.values).sorted { $0.totalScore > $1.totalScore }
         }
 
-        let symbols = getAllSupportedSymbols()
+        let symbols = await getDynamicSupportedSymbols()
 
         // Batch fetch all market data upfront
         let marketDataMap = try await batchFetchMarketData(symbols: symbols)
@@ -332,16 +332,24 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
         return score
     }
 
-    private func getAllSupportedSymbols() -> [String] {
-        // Robinhood-supported cryptocurrencies (official list)
-        return [
-            "AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
-            "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
-            "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
-            "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
-            "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
-            "VIRTUAL", "ZORA"
-        ]
+    private func getDynamicSupportedSymbols() async -> [String] {
+        do {
+            let apiSymbols = try await RobinhoodInstrumentsAPI.shared.fetchSupportedSymbols(logger: logger)
+            return apiSymbols
+        } catch {
+            logger.warn(component: "CoinScoringEngine", event: "robinhood_api_failed", data: [
+                "error": error.localizedDescription,
+                "message": "Falling back to static list"
+            ])
+            return [
+                "AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
+                "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
+                "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
+                "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
+                "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
+                "VIRTUAL", "ZORA"
+            ]
+        }
     }
 
     private func calculateTechnicalScore(symbol: String) async throws -> Double {
@@ -1111,7 +1119,7 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
         // Use weighted average with position-based weights to create differentiation
         let weights = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5] // Increasing weights for each component
         let weightedScores = scores.enumerated().map { index, score in
-            let weight = index < weights.count ? weights[index] : weights.last!
+            let weight = index < weights.count ? weights[index] : (weights.last ?? 1.5)
             return score * weight
         }
 
@@ -1120,7 +1128,8 @@ public class CoinScoringEngine: CoinScoringEngineProtocol, @unchecked Sendable {
         let weightedAverage = weightedSum / totalWeight
 
         // Add some variation based on the individual score differences
-        let scoreRange = scores.max()! - scores.min()!
+        guard let maxScore = scores.max(), let minScore = scores.min() else { return weightedAverage }
+        let scoreRange = maxScore - minScore
         let variationFactor = min(0.1, scoreRange * 2) // Cap variation at 10%
 
         let finalScore = weightedAverage + variationFactor

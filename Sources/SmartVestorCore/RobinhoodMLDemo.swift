@@ -47,7 +47,7 @@ public class RobinhoodMLDemo: @unchecked Sendable {
             data: ["symbol": "BTC"]
         )
 
-        let robinhoodCoins = getAllRobinhoodSupportedCoins()
+        let robinhoodCoins = await getAllRobinhoodSupportedCoins()
 
         print("\n1. Robinhood Supported Cryptocurrencies:")
         print("   ✓ \(robinhoodCoins.count) coins supported on Robinhood")
@@ -102,15 +102,24 @@ public class RobinhoodMLDemo: @unchecked Sendable {
         )
     }
 
-    private func getAllRobinhoodSupportedCoins() -> [String] {
-        return [
-            "AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
-            "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
-            "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
-            "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
-            "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
-            "VIRTUAL", "ZORA"
-        ]
+    private func getAllRobinhoodSupportedCoins() async -> [String] {
+        do {
+            let symbols = try await RobinhoodInstrumentsAPI.shared.fetchSupportedSymbols(logger: logger)
+            return symbols
+        } catch {
+            logger.warn(component: "RobinhoodMLDemo", event: "robinhood_api_failed", data: [
+                "error": error.localizedDescription,
+                "message": "Falling back to static list"
+            ])
+            return [
+                "AAVE", "ADA", "ARB", "ASTER", "AVAX", "BCH", "BNB", "BONK",
+                "BTC", "COMP", "CRV", "DOGE", "ETC", "ETH", "FLOKI", "HBAR",
+                "HYPE", "LINK", "LTC", "MEW", "MOODENG", "ONDO", "OP", "PENGU",
+                "PEPE", "PNUT", "POPCAT", "SHIB", "SOL", "SUI", "TON", "TRUMP",
+                "UNI", "USDC", "XLM", "XPL", "XRP", "XTZ", "WLFI", "WIF",
+                "VIRTUAL", "ZORA"
+            ]
+        }
     }
 
     private func fetchOHLCVData(symbol: String, startDate: Date, endDate: Date) async throws -> [RobinhoodMarketData] {

@@ -181,10 +181,139 @@ public final class RobinhoodConnector: ExchangeConnector, @unchecked Sendable {
     }
 
     public func getRecentTransactions(limit: Int) async throws -> [Core.Transaction] {
-        throw ArbitrageError.logic(.internalError(
-            component: "RobinhoodConnector",
-            reason: "getRecentTransactions not implemented for \(name)"
-        ))
+        guard let credentials = configuration.credentials else {
+            throw ArbitrageError.connection(.authenticationFailed(
+                exchange: name,
+                reason: "No credentials provided"
+            ))
+        }
+
+        let endpoint = "/api/v1/crypto/trading/orders/"
+        let response = try await makeAuthenticatedRequest(
+            method: "GET",
+            endpoint: endpoint,
+            body: nil,
+            credentials: credentials
+        )
+
+        guard let results = response["results"] as? [[String: Any]] else {
+            logger.debug(component: component, event: "orders_response_empty", data: ["response_keys": Array(response.keys).joined(separator: ",")])
+            return []
+        }
+
+        var transactions: [Core.Transaction] = []
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        for order in results.prefix(limit) {
+            guard let id = order["id"] as? String,
+                  let sideStr = order["side"] as? String,
+                  let symbol = order["symbol"] as? String,
+                  let state = order["state"] as? String,
+                  state == "filled" else {
+                continue
+            }
+
+            logger.debug(component: component, event: "parsing_order", data: [
+                "id": id,
+                "side": sideStr,
+                "symbol": symbol,
+                "state": state,
+                "order_keys": Array(order.keys).joined(separator: ",")
+            ])
+
+            let side: Core.OrderSide = sideStr.lowercased() == "buy" ? .buy : .sell
+
+            var asset = symbol
+            if asset.hasSuffix("-USD") {
+                asset = String(asset.dropLast(4))
+            }
+
+            var quantity = 0.0
+            if let qtyStr = order["quantity"] as? String {
+                quantity = Double(qtyStr) ?? 0.0
+            } else if let qtyNum = order["quantity"] as? Double {
+                quantity = qtyNum
+            } else if let qtyNum = order["quantity"] as? Int {
+                quantity = Double(qtyNum)
+            }
+
+            if quantity == 0.0 {
+                if let filledQuantityStr = order["filled_asset_quantity"] as? String {
+                    quantity = Double(filledQuantityStr) ?? 0.0
+                } else if let filledQuantityNum = order["filled_asset_quantity"] as? Double {
+                    quantity = filledQuantityNum
+                } else if let filledQuantityNum = order["filled_asset_quantity"] as? Int {
+                    quantity = Double(filledQuantityNum)
+                }
+            }
+
+            if quantity == 0.0 {
+                if let marketOrderConfig = order["market_order_config"] as? [String: Any],
+                   let qtyStr = marketOrderConfig["asset_quantity"] as? String {
+                    quantity = Double(qtyStr) ?? 0.0
+                } else if let limitOrderConfig = order["limit_order_config"] as? [String: Any],
+                          let qtyStr = limitOrderConfig["asset_quantity"] as? String {
+                    quantity = Double(qtyStr) ?? 0.0
+                }
+            }
+
+            var averagePrice = 0.0
+            if let priceStr = order["average_price"] as? String {
+                averagePrice = Double(priceStr) ?? 0.0
+            } else if let priceNum = order["average_price"] as? Double {
+                averagePrice = priceNum
+            } else if let priceNum = order["average_price"] as? Int {
+                averagePrice = Double(priceNum)
+            }
+
+            if averagePrice == 0.0 {
+                if let priceStr = order["average_filled_price"] as? String {
+                    averagePrice = Double(priceStr) ?? 0.0
+                } else if let priceNum = order["average_filled_price"] as? Double {
+                    averagePrice = priceNum
+                } else if let priceNum = order["average_filled_price"] as? Int {
+                    averagePrice = Double(priceNum)
+                }
+            }
+
+            if averagePrice == 0.0 {
+                if let limitPriceStr = order["limit_price"] as? String {
+                    averagePrice = Double(limitPriceStr) ?? 0.0
+                } else if let limitPriceNum = order["limit_price"] as? Double {
+                    averagePrice = limitPriceNum
+                }
+            }
+
+            logger.debug(component: component, event: "parsed_order", data: [
+                "id": id,
+                "quantity": String(quantity),
+                "price": String(averagePrice),
+                "asset": asset
+            ])
+
+            var timestamp = Date()
+            if let updatedAtStr = order["updated_at"] as? String {
+                timestamp = dateFormatter.date(from: updatedAtStr) ?? Date()
+            } else if let createdAtStr = order["created_at"] as? String {
+                timestamp = dateFormatter.date(from: createdAtStr) ?? Date()
+            }
+
+            let transactionType: Core.TransactionType = side == .buy ? .buy : .sell
+
+            let transaction = Core.Transaction(
+                id: id,
+                type: transactionType,
+                asset: asset,
+                quantity: quantity,
+                price: averagePrice,
+                timestamp: timestamp
+            )
+
+            transactions.append(transaction)
+        }
+
+        return transactions.sorted { $0.timestamp > $1.timestamp }
     }
 
     public func placeOrder(
@@ -202,15 +331,25 @@ public final class RobinhoodConnector: ExchangeConnector, @unchecked Sendable {
         }
 
         let orderId = UUID().uuidString
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "client_order_id": orderId,
             "side": side == .buy ? "buy" : "sell",
             "type": type == .market ? "market" : "limit",
-            "symbol": symbol,
-            "market_order_config": [
+            "symbol": symbol
+        ]
+
+        // Configure order based on type
+        if type == .market {
+            body["market_order_config"] = [
                 "asset_quantity": String(format: "%.8f", quantity)
             ]
-        ]
+        } else {
+            // Limit order requires price and quantity
+            body["limit_order_config"] = [
+                "asset_quantity": String(format: "%.8f", quantity),
+                "limit_price": String(format: "%.8f", price)
+            ]
+        }
 
         let endpoint = "/api/v1/crypto/trading/orders/"
         let response = try await makeAuthenticatedRequest(

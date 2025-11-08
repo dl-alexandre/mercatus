@@ -1,0 +1,13 @@
+clearScreen
+moveCursor(0,0)
+clearLine
+clearLine
+writeBytes(5 bytes)
+clearLine
+clearLine
+clearLine
+clearLine
+clearLine
+clearLine
+clearLine
+clearLine

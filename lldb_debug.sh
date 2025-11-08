@@ -1,0 +1,16 @@
+#!/bin/bash
+
+echo "Setting up LLDB breakpoints for Metal debugging..."
+echo ""
+echo "Run these commands in LLDB:"
+echo ""
+echo "(lldb) b MTLCreateSystemDefaultDevice"
+echo "(lldb) b MTLCreateSystemDefaultDeviceWithOptions"
+echo "(lldb) b MTLCopyAllDevices"
+echo "(lldb) r coins --limit 3 --ml-based"
+echo ""
+echo "When it stops, run:"
+echo "(lldb) bt"
+echo ""
+echo "To start LLDB:"
+echo "lldb .build/debug/SmartVestorCLI"

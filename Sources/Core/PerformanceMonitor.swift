@@ -16,7 +16,7 @@ public actor PerformanceMonitor {
         }
     }
 
-    public struct EventMetrics: Sendable, Equatable {
+    public struct EventMetrics: Sendable, Equatable, Codable {
         public let eventType: String
         public let count: Int
         public let averageLatencyMs: Double
@@ -41,10 +41,13 @@ public actor PerformanceMonitor {
         }
     }
 
-    public struct PerformanceReport: Sendable, Equatable {
+    public struct PerformanceReport: Sendable, Equatable, Codable {
         public let reportInterval: TimeInterval
         public let spreadCalculatedMetrics: EventMetrics?
         public let tradeSimulatedMetrics: EventMetrics?
+        public let renderMetrics: EventMetrics?
+        public let renderLatencyMetrics: EventMetrics?
+        public let framesPerSecond: Double
         public let reconnectionCount: Int
         public let cpuUsagePercent: Double?
         public let memoryUsageMB: Double?
@@ -54,6 +57,9 @@ public actor PerformanceMonitor {
             reportInterval: TimeInterval,
             spreadCalculatedMetrics: EventMetrics?,
             tradeSimulatedMetrics: EventMetrics?,
+            renderMetrics: EventMetrics?,
+            renderLatencyMetrics: EventMetrics?,
+            framesPerSecond: Double,
             reconnectionCount: Int,
             cpuUsagePercent: Double?,
             memoryUsageMB: Double?,
@@ -62,6 +68,9 @@ public actor PerformanceMonitor {
             self.reportInterval = reportInterval
             self.spreadCalculatedMetrics = spreadCalculatedMetrics
             self.tradeSimulatedMetrics = tradeSimulatedMetrics
+            self.renderMetrics = renderMetrics
+            self.renderLatencyMetrics = renderLatencyMetrics
+            self.framesPerSecond = framesPerSecond
             self.reconnectionCount = reconnectionCount
             self.cpuUsagePercent = cpuUsagePercent
             self.memoryUsageMB = memoryUsageMB
@@ -81,6 +90,9 @@ public actor PerformanceMonitor {
 
     private var spreadCalculatedEvents: [EventRecord] = []
     private var tradeSimulatedEvents: [EventRecord] = []
+    private var renderEvents: [EventRecord] = []
+    private var renderLatencyEvents: [EventRecord] = []
+    private var frameTimestamps: [Date] = []
     private var reconnectionCount: Int = 0
     private var reportingTask: Task<Void, Never>?
 
@@ -108,6 +120,22 @@ public actor PerformanceMonitor {
         reconnectionCount += 1
     }
 
+    public func recordRenderTime(renderTimeMs: Double) {
+        let record = EventRecord(timestamp: clock(), latencyMs: renderTimeMs)
+        renderEvents.append(record)
+    }
+
+    public func recordRenderLatency(latencyMs: Double) {
+        let record = EventRecord(timestamp: clock(), latencyMs: latencyMs)
+        renderLatencyEvents.append(record)
+    }
+
+    public func recordFrame() {
+        frameTimestamps.append(clock())
+        let oneSecondAgo = clock().addingTimeInterval(-1.0)
+        frameTimestamps.removeAll { $0 < oneSecondAgo }
+    }
+
     public func startPeriodicReporting() {
         guard reportingTask == nil else { return }
 
@@ -129,6 +157,10 @@ public actor PerformanceMonitor {
     public func generateReport() -> PerformanceReport {
         let spreadMetrics = computeMetrics(for: spreadCalculatedEvents, eventType: "spread_calculated")
         let tradeMetrics = computeMetrics(for: tradeSimulatedEvents, eventType: "trade_simulated")
+        let renderMetrics = computeMetrics(for: renderEvents, eventType: "render_time")
+        let renderLatencyMetrics = computeMetrics(for: renderLatencyEvents, eventType: "render_latency")
+
+        let fps = Double(frameTimestamps.count)
 
         var cpuUsage: Double? = nil
         var memoryUsage: Double? = nil
@@ -142,6 +174,9 @@ public actor PerformanceMonitor {
             reportInterval: config.reportingInterval,
             spreadCalculatedMetrics: spreadMetrics,
             tradeSimulatedMetrics: tradeMetrics,
+            renderMetrics: renderMetrics,
+            renderLatencyMetrics: renderLatencyMetrics,
+            framesPerSecond: fps,
             reconnectionCount: reconnectionCount,
             cpuUsagePercent: cpuUsage,
             memoryUsageMB: memoryUsage,
@@ -152,6 +187,9 @@ public actor PerformanceMonitor {
     public func reset() {
         spreadCalculatedEvents.removeAll()
         tradeSimulatedEvents.removeAll()
+        renderEvents.removeAll()
+        renderLatencyEvents.removeAll()
+        frameTimestamps.removeAll()
         reconnectionCount = 0
     }
 
@@ -272,10 +310,73 @@ public actor PerformanceMonitor {
             data["memory_usage_mb"] = String(format: "%.2f", memoryUsage)
         }
 
+        if let renderMetrics = report.renderMetrics {
+            data["render_time_count"] = String(renderMetrics.count)
+            data["render_time_avg_ms"] = String(format: "%.3f", renderMetrics.averageLatencyMs)
+            data["render_time_min_ms"] = String(format: "%.3f", renderMetrics.minLatencyMs)
+            data["render_time_max_ms"] = String(format: "%.3f", renderMetrics.maxLatencyMs)
+            data["render_time_p95_ms"] = String(format: "%.3f", renderMetrics.p95LatencyMs)
+        } else {
+            data["render_time_count"] = "0"
+        }
+
+        if let renderLatencyMetrics = report.renderLatencyMetrics {
+            data["render_latency_count"] = String(renderLatencyMetrics.count)
+            data["render_latency_avg_ms"] = String(format: "%.3f", renderLatencyMetrics.averageLatencyMs)
+            data["render_latency_min_ms"] = String(format: "%.3f", renderLatencyMetrics.minLatencyMs)
+            data["render_latency_max_ms"] = String(format: "%.3f", renderLatencyMetrics.maxLatencyMs)
+            data["render_latency_p95_ms"] = String(format: "%.3f", renderLatencyMetrics.p95LatencyMs)
+        } else {
+            data["render_latency_count"] = "0"
+        }
+
+        data["frames_per_second"] = String(format: "%.2f", report.framesPerSecond)
+
         logger?.info(
             component: componentName,
             event: "performance_report",
             data: data
         )
+    }
+
+    public func exportReportToJSON() throws -> Data {
+        let report = generateReport()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(report)
+    }
+
+    public func exportReportToCSV() -> String {
+        let report = generateReport()
+        var lines: [String] = []
+
+        lines.append("timestamp,report_interval_seconds,reconnection_count,frames_per_second")
+
+        if let spreadMetrics = report.spreadCalculatedMetrics {
+            lines.append("spread_calculated,\(spreadMetrics.count),\(spreadMetrics.averageLatencyMs),\(spreadMetrics.minLatencyMs),\(spreadMetrics.maxLatencyMs),\(spreadMetrics.p95LatencyMs)")
+        }
+
+        if let tradeMetrics = report.tradeSimulatedMetrics {
+            lines.append("trade_simulated,\(tradeMetrics.count),\(tradeMetrics.averageLatencyMs),\(tradeMetrics.minLatencyMs),\(tradeMetrics.maxLatencyMs),\(tradeMetrics.p95LatencyMs)")
+        }
+
+        if let renderMetrics = report.renderMetrics {
+            lines.append("render_time,\(renderMetrics.count),\(renderMetrics.averageLatencyMs),\(renderMetrics.minLatencyMs),\(renderMetrics.maxLatencyMs),\(renderMetrics.p95LatencyMs)")
+        }
+
+        if let renderLatencyMetrics = report.renderLatencyMetrics {
+            lines.append("render_latency,\(renderLatencyMetrics.count),\(renderLatencyMetrics.averageLatencyMs),\(renderLatencyMetrics.minLatencyMs),\(renderLatencyMetrics.maxLatencyMs),\(renderLatencyMetrics.p95LatencyMs)")
+        }
+
+        if let cpuUsage = report.cpuUsagePercent {
+            lines.append("cpu_usage_percent,\(cpuUsage)")
+        }
+
+        if let memoryUsage = report.memoryUsageMB {
+            lines.append("memory_usage_mb,\(memoryUsage)")
+        }
+
+        return lines.joined(separator: "\n")
     }
 }

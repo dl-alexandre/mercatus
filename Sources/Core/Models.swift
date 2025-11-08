@@ -173,7 +173,7 @@ private extension Decimal {
     }
 }
 
-private extension Duration {
+public extension Duration {
     var timeInterval: TimeInterval {
         let parts = components
         let seconds = Double(parts.seconds)

@@ -76,7 +76,7 @@ public class RobinhoodMLPhase2: @unchecked Sendable {
         print("\n2. Demonstrating Ensemble Predictions...")
 
         let symbol = "BTC"
-        let features = try await extractFeatures(symbol: symbol)
+        _ = try await extractFeatures(symbol: symbol)
 
         print("\n   Individual Model Predictions:")
 
@@ -214,9 +214,17 @@ public class RobinhoodMLPhase2: @unchecked Sendable {
 
     private func calculateVolatility(prices: [Double]) -> Double {
         guard prices.count > 1 else { return 0.0 }
-        let returns = (1..<prices.count).map { (prices[$0] - prices[$0-1]) / prices[$0-1] }
-        let mean = returns.reduce(0, +) / Double(returns.count)
-        let variance = returns.map { pow($0 - mean, 2) }.reduce(0, +) / Double(returns.count)
+        let returns: [Double] = (1..<prices.count).map { index in
+            let priceChange = prices[index] - prices[index-1]
+            return priceChange / prices[index-1]
+        }
+        let sum = returns.reduce(0, +)
+        let mean = sum / Double(returns.count)
+        let squaredDiffs = returns.map { returnValue in
+            pow(returnValue - mean, 2)
+        }
+        let sumSquaredDiffs = squaredDiffs.reduce(0, +)
+        let variance = sumSquaredDiffs / Double(returns.count)
         return sqrt(variance)
     }
 }

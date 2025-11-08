@@ -1,0 +1,71 @@
+name: TUI Performance Benchmarks
+
+on:
+  pull_request:
+    paths:
+      - 'Sources/SmartVestorCore/**'
+      - 'Sources/SmartVestor/Commands/TUIBenchCommand.swift'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Sources/SmartVestorCore/**'
+      - 'Sources/SmartVestor/Commands/TUIBenchCommand.swift'
+
+jobs:
+  benchmark:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v1
+        with:
+          swift-version: "6.0"
+
+      - name: Build
+        run: swift build
+
+      - name: Run Benchmarks
+        id: bench
+        run: |
+          swift run SmartVestorCLI tui-bench --width 120 --height 40 --duration 10 2>&1 | tee bench.log
+
+      - name: Check P95 Latency Threshold
+        run: |
+          if ! grep -qE "P95 render latency: [0-4][0-9]\." bench.log; then
+            echo "❌ P95 render latency exceeds 50ms threshold"
+            grep "P95 render latency:" bench.log
+            exit 1
+          fi
+          echo "✅ P95 render latency within threshold"
+
+      - name: Check Changed Lines Threshold
+        run: |
+          if ! grep -qE "Changed lines avg: ([0-9]|1[0-4])\." bench.log; then
+            echo "❌ Changed lines percentage exceeds 15% threshold"
+            grep "Changed lines avg:" bench.log
+            exit 1
+          fi
+          echo "✅ Changed lines percentage within threshold"
+
+      - name: Archive Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            bench.log
+            bench_results.json
+          retention-days: 30
+
+      - name: Update Baseline (main only)
+        if: github.ref == 'refs/heads/main' && success()
+        run: |
+          mkdir -p benchmarks
+          cp bench_results.json benchmarks/bench_baseline.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add benchmarks/bench_baseline.json
+          git commit -m "Update TUI benchmark baseline" || echo "No changes to commit"
+          git push || echo "Push failed (may require manual update)"

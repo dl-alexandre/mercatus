@@ -57,23 +57,19 @@ public class WebSocketHandler: @unchecked Sendable {
     }
 
     private func handleMessages(for connectionId: String, connection: WebSocketConnection) async {
-        do {
-            for try await message in connection.messages {
-                switch message {
-                case .text(let text):
-                    await handleTextMessage(text, connectionId: connectionId, connection: connection)
-                case .data(let data):
-                    await handleDataMessage(data, connectionId: connectionId, connection: connection)
-                case .close:
-                    break
-                case .ping:
-                    await connection.sendPong()
-                case .pong:
-                    break
-                }
+        for await message in connection.messages {
+            switch message {
+            case .text(let text):
+                await handleTextMessage(text, connectionId: connectionId, connection: connection)
+            case .data(let data):
+                await handleDataMessage(data, connectionId: connectionId, connection: connection)
+            case .close:
+                break
+            case .ping:
+                await connection.sendPong()
+            case .pong:
+                break
             }
-        } catch let error {
-            logger.error(component: "WebSocketHandler", event: "WebSocket error: \(error)", data: ["connectionId": connectionId])
         }
     }
 
